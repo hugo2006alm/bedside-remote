@@ -1,0 +1,58 @@
+Bedside Remote - Android third-party notices
+
+These notices and accompanying licenses apply only to the third-party
+components identified below. They do not license Bedside Remote's original
+application code. No project-wide open-source license is granted here.
+
+Runtime libraries (including transitive dependencies and debug tooling)
+are distributed under Apache License 2.0, reproduced in Apache-2.0.txt:
+
+- AndroidX / Jetpack Compose: The Android Open Source Project and AndroidX
+  contributors. https://developer.android.com/jetpack/androidx
+  Activity / Activity Compose / KTX 1.11.0; Annotation 1.9.1 and Annotation
+  Experimental 1.4.1; AppCompat Resources 1.6.1; Arch Core 2.2.0; Autofill
+  1.0.0; Collection / KTX 1.5.0; Concurrent Futures 1.1.0; Core / KTX 1.17.0
+  and Core ViewTree 1.0.0; CustomView PoolingContainer 1.0.0; Emoji2 1.4.0;
+  ExifInterface 1.3.7; Graphics Path 1.0.1; Interpolator 1.0.0; Lifecycle
+  (Common, LiveData Core, Process, Runtime, ViewModel, Compose, KTX and
+  SavedState integrations) 2.9.4; ProfileInstaller 1.4.0; SavedState / Compose
+  / KTX 1.3.3; Startup 1.1.1; Tracing 1.2.0; VectorDrawable / Animated 1.1.0;
+  VersionedParcelable 1.1.1.
+  Compose Animation / Core, Foundation / Layout, Material / Ripple, Runtime
+  / Annotation / Saveable, UI / Geometry / Graphics / Text / Unit / Util /
+  Tooling / Tooling Data / Tooling Preview / Test Manifest 1.9.3; Material
+  Icons Core / Extended 1.7.8; Material 3 1.4.0.
+  The Compose BOM 2025.10.00 selects versions; it is build metadata.
+
+- Kotlin standard library 2.2.21, with JDK7 / JDK8 compatibility artifacts
+  1.9.0: JetBrains s.r.o. and Kotlin contributors. https://kotlinlang.org/
+- Kotlin Coroutines Core / Android 1.10.2: JetBrains s.r.o. and contributors.
+  https://kotlinlang.org/docs/coroutines-overview.html
+- Kotlin Serialization Core / JSON 1.9.0: JetBrains s.r.o. and contributors.
+  https://kotlinlang.org/docs/serialization.html
+- JetBrains Annotations 23.0.0: JetBrains s.r.o. and contributors.
+  https://www.jetbrains.com/help/idea/annotating-source-code.html
+- OkHttp 4.12.0 and Okio JVM 3.9.0: Square, Inc. and contributors.
+  https://square.github.io/okhttp/ and https://square.github.io/okio/
+- Coil / Coil Base / Compose / Compose Base 2.7.0: Colin White and Coil
+  contributors. https://coil-kt.github.io/coil/
+- Accompanist DrawablePainter 0.32.0: Google LLC and Accompanist contributors.
+  https://google.github.io/accompanist/
+- Guava ListenableFuture 1.0: The Guava Authors. https://guava.dev/
+- JSpecify 1.0.0: The JSpecify Authors. https://jspecify.dev/
+
+OkHttp's bundled Public Suffix List data is separately covered by Mozilla
+Public License 2.0, reproduced in MPL-2.0.txt. Its upstream NOTICE is
+preserved verbatim in OkHttp-Public-Suffix-NOTICE.txt. Source data:
+https://publicsuffix.org/list/public_suffix_list.dat
+
+Bundled fonts retain their separate SIL Open Font License 1.1 notices:
+- DM Sans: DM-Sans-OFL.txt (The DM Sans Project Authors).
+- Manrope: Manrope-OFL.txt (The Manrope Project Authors).
+https://fonts.google.com/specimen/DM+Sans
+https://fonts.google.com/specimen/Manrope
+
+Dependency licenses and notices embedded in the runtime Maven artifacts
+remain packaged where supplied. This asset also preserves a complete
+Apache 2.0 license independent of generic META-INF/AL2.0 exclusions.
+Update this inventory whenever runtime library or font versions change.

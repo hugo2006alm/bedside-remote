@@ -23,7 +23,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.x
+          global-json-file: global.json
       - name: Provision verified Inno Setup compiler
         shell: pwsh
         run: |
@@ -88,32 +88,10 @@ jobs:
             $signature = Set-AuthenticodeSignature -FilePath $expected -Certificate $cert -TimestampServer 'http://timestamp.digicert.com' -HashAlgorithm SHA256
             if ($signature.Status -ne 'Valid') { throw 'Installer signing failed.' }
           }
-          $installDir = [IO.Path]::GetFullPath((Join-Path $env:RUNNER_TEMP 'BedsideRemote-install-smoke'))
+          $installDir = [IO.Path]::GetFullPath((Join-Path $env:RUNNER_TEMP 'BedsideRemote-install-smoke-João-語'))
           $tempRoot = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
           if (-not $installDir.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Installer smoke target must stay inside RUNNER_TEMP.' }
-          $dataDir = Join-Path $env:LOCALAPPDATA 'BedsideRemote'
-          New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
-          $sentinel = Join-Path $dataDir 'installer-smoke-sentinel'
-          Set-Content -LiteralPath $sentinel -Value 'preserve-user-data' -Encoding utf8
-          try {
-            foreach ($attempt in 1..2) {
-              $setup = Start-Process -FilePath $expected -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$installDir") -Wait -PassThru -WindowStyle Hidden
-              if ($setup.ExitCode -ne 0) { throw "Install/upgrade smoke failed: $($setup.ExitCode)" }
-              if (-not (Test-Path -LiteralPath (Join-Path $installDir 'BedsideRemote.exe'))) { throw 'Installed executable is missing.' }
-              $manifestPath = Join-Path $installDir 'native-host.json'
-              $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-              if ($manifest.name -ne 'com.bedside.remote' -or $manifest.allowed_extensions.Count -ne 1 -or $manifest.allowed_extensions[0] -ne 'bedside-remote@hugo2006alm' -or $manifest.path -ne (Join-Path $installDir 'BedsideRemote.exe')) { throw 'Installed Native Messaging manifest is invalid.' }
-              $registered = (Get-ItemProperty -LiteralPath 'HKCU:\Software\Mozilla\NativeMessagingHosts\com.bedside.remote').'(default)'
-              if ($registered -ne $manifestPath) { throw 'Native Messaging registration is missing.' }
-              if ((Get-Content -LiteralPath $sentinel -Raw).Trim() -ne 'preserve-user-data') { throw 'Upgrade changed user configuration.' }
-            }
-            $uninstall = Start-Process -FilePath (Join-Path $installDir 'unins000.exe') -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru -WindowStyle Hidden
-            if ($uninstall.ExitCode -ne 0) { throw 'Uninstall smoke failed.' }
-            if (Test-Path -LiteralPath 'HKCU:\Software\Mozilla\NativeMessagingHosts\com.bedside.remote') { throw 'Uninstall left Native Messaging registration behind.' }
-            if (-not (Test-Path -LiteralPath $sentinel)) { throw 'Uninstall removed saved user configuration.' }
-          } finally {
-            if (Test-Path -LiteralPath $sentinel) { Remove-Item -LiteralPath $sentinel }
-          }
+          & ./windows/installer/smoke-test.ps1 -Installer $expected -InstallDirectory $installDir
           @{ component = 'windows'; signed = $signed; reason = $(if ($signed) { '' } else { 'Authenticode certificate is not configured.' }) } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $outputDir 'windows-signing.json') -Encoding utf8
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

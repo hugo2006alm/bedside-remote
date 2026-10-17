@@ -44,7 +44,7 @@ Revoke a phone in the Windows device list to terminate access. Removing a saved 
 
 ## Build and test
 
-Use JDK 17 + Android SDK 36, .NET SDK 10 and Node.js 24. Gradle's wrapper verifies its distribution checksum. Installers use Inno Setup 6. Component READMEs provide details.
+Use JDK 17 + Android SDK 36, .NET SDK 10.0.402 (pinned in `global.json`) and Node.js 24. Gradle's wrapper verifies its distribution checksum. Installers use Inno Setup 6.7 or later. Component READMEs provide details.
 
 ```powershell
 # Android (from android/)

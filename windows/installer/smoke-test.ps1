@@ -18,9 +18,8 @@ Set-Content -LiteralPath $sentinel -Value 'Preserve data through installation, u
 $uninstaller = Join-Path $smokePath 'unins000.exe'
 $uninstalled = $false
 function Invoke-Silent([string]$Executable, [string[]]$Arguments) {
-    $process = Start-Process -FilePath $Executable -ArgumentList $Arguments -WindowStyle Hidden -PassThru
-    $process.WaitForExit()
-    if ($null -ne $process.ExitCode -and $process.ExitCode -ne 0) { throw "Installer returned $($process.ExitCode)." }
+    $process = Start-Process -FilePath $Executable -ArgumentList $Arguments -WindowStyle Hidden -PassThru -Wait
+    if ($process.ExitCode -ne 0) { throw "Installer returned $($process.ExitCode)." }
 }
 try {
     for ($pass = 0; $pass -lt 2; $pass++) {
@@ -29,6 +28,10 @@ try {
         $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding utf8 | ConvertFrom-Json
         if ($manifest.path -ne (Join-Path $smokePath 'BedsideRemote.exe')) { throw 'Native manifest path is incorrect or Unicode was corrupted.' }
         if ($manifest.allowed_extensions.Count -ne 1 -or $manifest.allowed_extensions[0] -ne 'bedside-remote@hugo2006alm') { throw 'Native extension allowlist is incorrect.' }
+        foreach ($notice in @('licenses/Haukcode.Mdns/LICENSE', 'licenses/dotnet-runtime/THIRD-PARTY-NOTICES.TXT', 'licenses/aspnetcore-runtime/THIRD-PARTY-NOTICES.TXT', 'licenses/windowsdesktop-runtime/LICENSE')) {
+            $noticePath = Join-Path $smokePath $notice
+            if (-not (Test-Path -LiteralPath $noticePath) -or (Get-Item -LiteralPath $noticePath).Length -eq 0) { throw "Installed third-party notice is missing: $notice" }
+        }
         if ((Get-Item -LiteralPath $hostKey).GetValue('') -ne $manifestPath) { throw 'Current-user native host registration is incorrect.' }
         if (-not (Test-Path -LiteralPath $sentinel)) { throw 'Installation or upgrade removed app data.' }
     }

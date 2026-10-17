@@ -4,7 +4,7 @@ The .NET 10 LTS WPF agent runs in the signed-in user's interactive session, with
 
 ## Build and validate
 
-Install the .NET 10 SDK on Windows. From the repository root:
+Install the .NET 10.0.402 SDK on Windows, matching the repository's `global.json`. From the repository root:
 
 ```powershell
 dotnet restore windows/BedsideRemote.slnx
@@ -24,6 +24,8 @@ ISCC.exe /DAppVersion=0.1.0-alpha.1 "/DPublishDir=$PWD/artifacts/windows" "/DOut
 ```
 
 Use a consistent release version across components. The self-contained installer includes the .NET runtime. Authenticode signing is performed by the release workflow when its signing credentials are configured.
+
+The published `licenses/` directory contains the dependency and runtime notices from [windows/licenses](licenses/README.md). These notices apply only to the identified third-party components, not to the project's own source.
 
 ## Pairing and browser integration
 

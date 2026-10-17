@@ -24,6 +24,8 @@ References: [Android app signing](https://developer.android.com/studio/publish/a
 
 Temporary keystores/certificates are removed after jobs. Do not commit key material, upload it as a build artifact or disable signature enforcement to make an extension install normally.
 
+Distribution packages retain third-party notices without selecting a license for the application source. Keep the Windows runtime notice copies synchronized with the runtime packs when updating the pinned .NET SDK; Android bundles its runtime dependency and font notices in assets.
+
 ## Artifacts and incomplete releases
 
 With configured signatures, releases contain `bedside-remote-android-vX.Y.Z.apk`, `bedside-remote-windows-x64-vX.Y.Z-setup.exe` and `bedside-remote-extension-vX.Y.Z.xpi`, plus extension source, signing reports, a compatibility/validation manifest and SHA-256 checksums.
