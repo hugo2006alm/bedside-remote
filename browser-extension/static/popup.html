@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bedside Remote</title><link rel="stylesheet" href="popup.css"></head>
+<body>
+  <header><span class="brand" aria-hidden="true">BR</span><div><h1>Bedside Remote</h1><p>Browser connection</p></div></header>
+  <main>
+    <p id="connection" role="status" aria-live="polite">Connecting…</p>
+    <p id="detail" class="muted"></p>
+    <button id="reconnect" type="button">Retry Windows connection</button>
+    <label for="target">Remote control target</label>
+    <select id="target"><option>No compatible tabs</option></select>
+    <p id="player" role="status" aria-live="polite"></p>
+    <p class="muted">Open YouTube or Netflix, then start a video. Allow this extension access to the site when Firefox asks.</p>
+    <p class="muted">Player titles, playback state and YouTube video links are shared with your local Windows agent and paired phones. No cloud service or streaming credentials.</p>
+    <p class="muted">Fullscreen needs a click in the browser. Universal remote keyboard controls remain available.</p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>
