@@ -55,7 +55,7 @@ if (adapter) {
       busy = true;
       try {
         const command = parseNativeCommand(message.command);
-        if (command.command === 'openYoutube') throw new Error('Navigation must be handled by the background.');
+        if (command.command === 'openYoutube' || command.command === 'selectTab') throw new Error('Tab operations must be handled by the background.');
         await adapter!.execute(command.command, command.position);
         error = undefined;
         return { ok: true };

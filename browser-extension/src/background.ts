@@ -13,7 +13,8 @@ const native = new NativeLink(message => {
 }, publish);
 
 function snapshot() {
-  const ordered = [...tabs.values()].map(item => item.state).sort((a, b) => Number(b.tabId === activeTabId) - Number(a.tabId === activeTabId));
+  const ordered = [...tabs.values()].map(item => item.state)
+    .sort((a, b) => Number(b.tabId === activeTabId) - Number(a.tabId === activeTabId)).slice(0, 32);
   const message: { version: 1; type: 'browser.state'; activeTabId?: number; tabs: Playback[] } = {
     version: 1, type: 'browser.state', ...(activeTabId !== undefined && tabs.has(activeTabId) ? { activeTabId } : {}), tabs: []
   };
@@ -38,6 +39,13 @@ function forget(tabId: number) {
   publish();
 }
 async function execute(command: NativeCommand): Promise<Result> {
+  if (command.command === 'selectTab') {
+    if (command.tabId === undefined || !tabs.has(command.tabId)) throw new Error('The selected compatible tab is no longer available.');
+    activeTabId = command.tabId;
+    pendingActiveTabId = undefined;
+    publish();
+    return { ok: true };
+  }
   if (command.command === 'openYoutube') {
     const url = command.url!;
     const videoId = new URL(url).searchParams.get('v');

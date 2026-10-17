@@ -21,7 +21,7 @@ export interface NativeCommand {
   type: 'browser.command';
   id: string;
   tabId?: number;
-  command: Command | 'openYoutube';
+  command: Command | 'openYoutube' | 'selectTab';
   position?: number;
   url?: string;
 }
@@ -36,7 +36,8 @@ export function parseNativeCommand(value: unknown): NativeCommand {
   if (!object(value) || !onlyKeys(value, ['version', 'type', 'id', 'tabId', 'command', 'position', 'url']) ||
       value.version !== 1 || value.type !== 'browser.command' || typeof value.id !== 'string' || !value.id || value.id.length > 128 ||
       (value.tabId !== undefined && (!Number.isSafeInteger(value.tabId) || (value.tabId as number) < 0)) ||
-      typeof value.command !== 'string' || ![...COMMANDS, 'openYoutube'].includes(value.command)) throw new Error('Invalid browser command.');
+      typeof value.command !== 'string' || ![...COMMANDS, 'openYoutube', 'selectTab'].includes(value.command)) throw new Error('Invalid browser command.');
+  if (value.command === 'selectTab' && value.tabId === undefined) throw new Error('Tab selection requires a tab ID.');
   if (value.command === 'seek') {
     if (typeof value.position !== 'number' || !Number.isFinite(value.position) || value.position < 0 || value.url !== undefined) throw new Error('Invalid seek position.');
   } else if (value.position !== undefined) throw new Error('Unexpected position.');

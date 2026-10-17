@@ -55,6 +55,14 @@ test('background tracks multiple tabs, explicit selection, reload and native com
     await report(2, 'second', state('netflix'));
     assert.equal(nativeOut.at(-1)!.activeTabId, 2, 'newly activated compatible tab becomes target after its first player snapshot');
     assert.equal((nativeOut.at(-1)!.tabs as unknown[]).length, 2);
+    nativeMessage.emit({ version: 1, type: 'browser.command', id: 'select', command: 'selectTab', tabId: 1 });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(nativeOut.at(-2)!.activeTabId, 1, 'native selection synchronizes popup target without player actions');
+    assert.equal(nativeOut.at(-1)!.ok, true);
+    assert.equal(playerCommands.length, 0);
+    nativeMessage.emit({ version: 1, type: 'browser.command', id: 'select-missing', command: 'selectTab', tabId: 999 });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(nativeOut.at(-1)!.ok, false, 'selection rejects a tab absent from compatible player state');
     await Promise.all(runtimeMessage.emit({ type: 'popup.select', tabId: 2 }, { id: api.runtime.id, url: api.runtime.getURL('popup.html') }));
     await report(1, 'first', { ...state('youtube'), position: 10 });
     const popup = await runtimeMessage.emit({ type: 'popup.status' }, { id: api.runtime.id, url: api.runtime.getURL('popup.html') })[0] as { activeTabId: number };
@@ -79,5 +87,14 @@ test('background tracks multiple tabs, explicit selection, reload and native com
     assert.equal(connections, 2, 'native host disconnect retries with bounded backoff');
     assert.equal(nativeOut.at(-1)!.type, 'browser.state', 'reconnection sends a fresh snapshot, never replays player commands');
     assert.equal(playerCommands.length, 1);
+    for (let index = 100; index < 133; index++) {
+      live.set(index, { id: index, url, active: false });
+      await report(index, `tab-${index}`, state('youtube'));
+    }
+    await Promise.all(runtimeMessage.emit({ type: 'popup.select', tabId: 132 }, { id: api.runtime.id, url: api.runtime.getURL('popup.html') }));
+    const bounded = nativeOut.at(-1)!;
+    assert.equal((bounded.tabs as unknown[]).length, 32, '33 compatible tabs obey the native parser limit');
+    assert.equal((bounded.tabs as { tabId: number }[])[0]!.tabId, 132, 'selected tab survives truncation even when added last');
+    assert.equal(bounded.activeTabId, 132);
   } finally { for (const timer of timers) clearTimeout(timer); }
 });

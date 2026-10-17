@@ -15,6 +15,9 @@ test('native commands reject unknown keys, versions and mismatched payloads', ()
   for (const change of [{ version: 2 }, { type: 'command' }, { command: 'executeShell' }, { extra: true }, { position: NaN }, { position: -1 }, { tabId: -1 }, { command: 'playPause' }]) assert.throws(() => parseNativeCommand({ ...command, ...change }));
   assert.throws(() => parseNativeCommand({ version: 1, type: 'browser.command', id: 'x', command: 'openYoutube', url: 'https://youtu.be/dQw4w9WgXcQ' }));
   assert.equal(parseNativeCommand({ version: 1, type: 'browser.command', id: 'x', command: 'openYoutube', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }).command, 'openYoutube');
+  const select = { version: 1, type: 'browser.command', id: 'select', command: 'selectTab', tabId: 2 };
+  assert.equal(parseNativeCommand(select).command, 'selectTab');
+  for (const change of [{ tabId: undefined }, { position: 0 }, { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }]) assert.throws(() => parseNativeCommand({ ...select, ...change }));
 });
 test('state validation excludes malformed and unbounded browser data', () => {
   const state = { platform: 'youtube', title: 'Title', paused: false, position: 1, duration: 2, ended: false, capabilities: ['playPause'] };
