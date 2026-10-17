@@ -1,0 +1,17 @@
+[
+  {"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ","videoId":"dQw4w9WgXcQ"},
+  {"url":"https://youtu.be/dQw4w9WgXcQ?si=share","videoId":"dQw4w9WgXcQ"},
+  {"url":"https://m.youtube.com/watch?v=dQw4w9WgXcQ&t=12","videoId":"dQw4w9WgXcQ"},
+  {"url":"https://youtube.com/shorts/dQw4w9WgXcQ","videoId":"dQw4w9WgXcQ"},
+  {"url":"https://www.youtube.com/live/dQw4w9WgXcQ","videoId":"dQw4w9WgXcQ"},
+  {"url":"https://www.youtube.com/embed/dQw4w9WgXcQ","videoId":"dQw4w9WgXcQ"},
+  {"url":"https://music.youtube.com/watch?v=dQw4w9WgXcQ","videoId":"dQw4w9WgXcQ"},
+  {"url":"https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ","videoId":null},
+  {"url":"https://user@youtube.com/watch?v=dQw4w9WgXcQ","videoId":null},
+  {"url":"http://youtube.com/watch?v=dQw4w9WgXcQ","videoId":null},
+  {"url":"https://youtube.com:8443/watch?v=dQw4w9WgXcQ","videoId":null},
+  {"url":"https://youtu.be/short","videoId":null},
+  {"url":"https://www.youtube.com/playlist?list=PL123","videoId":null},
+  {"url":"javascript:alert(1)","videoId":null},
+  {"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQevil","videoId":null}
+]
