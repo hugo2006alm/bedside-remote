@@ -2,7 +2,7 @@
 
 ## Automatic flow
 
-Each push to main runs version calculation and calls Android, Windows and extension CI. All builds and tests must pass before the publishing job creates both the tag and GitHub Release. This avoids relying on a GITHUB_TOKEN-created tag to trigger another workflow ([GitHub documentation](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)). PRs run component checks without publishing.
+Each push to main runs version calculation and calls Android, Windows and extension CI. Android also runs Compose tests on an API 35 emulator and captures its real initial screen; Windows tests its published Native Messaging executable and installer install/upgrade/removal. All builds and tests must pass before the publishing job creates both the tag and GitHub Release. This avoids relying on a GITHUB_TOKEN-created tag to trigger another workflow ([GitHub documentation](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)). PRs run component checks without publishing or receiving signing secrets. AMO signing runs only for an eligible release, never on a documentation-only push that reuses the previous version.
 
 Conventional Commits control versioning: `fix:`/`perf:` increment patch, `feat:` increments minor, and `!` or a `BREAKING CHANGE:` footer increments major. Documentation/chore-only changes do not publish. Initial eligible delivery is `0.1.0-alpha.1`. Every later eligible delivery increments the relevant core version; prerelease channels append `-alpha.1` or `-beta.1`.
 

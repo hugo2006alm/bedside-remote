@@ -1,0 +1,136 @@
+name: Windows CI
+on:
+  pull_request:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        default: 0.1.0-alpha.1
+    secrets:
+      WINDOWS_SIGNING_PFX_BASE64:
+        required: false
+      WINDOWS_SIGNING_PASSWORD:
+        required: false
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Provision verified Inno Setup compiler
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'innosetup-6.7.3.exe'
+          Invoke-WebRequest -Uri 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe' -OutFile $installer
+          if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -ne '9C73C3BAE7ED48D44112A0F48E66742C00090BDB5BEF71D9D3C056C66E97B732') { throw 'Inno Setup checksum mismatch.' }
+          $signature = Get-AuthenticodeSignature -LiteralPath $installer
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'CN=Pyrsys B\.V\.') { throw 'Inno Setup publisher verification failed.' }
+          $toolDir = Join-Path $env:RUNNER_TEMP 'innosetup'
+          $process = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', '/NOICONS', "/DIR=`"$toolDir`"") -Wait -PassThru -WindowStyle Hidden
+          if ($process.ExitCode -ne 0) { throw 'Inno Setup provisioning failed.' }
+          "ISCC_PATH=$(Join-Path $toolDir 'ISCC.exe')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Restore, format, analyze, build and test
+        shell: pwsh
+        run: |
+          dotnet restore windows/BedsideRemote.slnx
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet format windows/BedsideRemote.slnx --verify-no-changes --no-restore
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build windows/BedsideRemote.slnx -c Release --no-restore
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet run --project windows/BedsideRemote.Tests -c Release --no-build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet run --project windows/BedsideRemote.IntegrationTests -c Release --no-build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Publish and package Windows x64
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ inputs.version || '0.1.0-alpha.1' }}
+          PFX_BASE64: ${{ github.event_name != 'pull_request' && secrets.WINDOWS_SIGNING_PFX_BASE64 || '' }}
+          PFX_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.WINDOWS_SIGNING_PASSWORD || '' }}
+        run: |
+          $publishDir = Join-Path $env:RUNNER_TEMP 'windows-publish'
+          $outputDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts'
+          New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+          dotnet publish windows/BedsideRemote.Agent/BedsideRemote.Agent.csproj -c Release -r win-x64 --self-contained true "-p:Version=$env:APP_VERSION" -o $publishDir
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $publishedExe = Join-Path $publishDir 'BedsideRemote.exe'
+          $preview = Join-Path $env:RUNNER_TEMP 'windows-preview.png'
+          dotnet run --project windows/BedsideRemote.IntegrationTests -c Release --no-build -- "--native-exe=$publishedExe" "--preview=$preview"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $signed = $false
+          if ($env:PFX_BASE64 -and $env:GITHUB_EVENT_NAME -ne 'pull_request') {
+            $pfxPath = Join-Path $env:RUNNER_TEMP 'windows-signing.pfx'
+            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:PFX_BASE64))
+            $securePassword = ConvertTo-SecureString $env:PFX_PASSWORD -AsPlainText -Force
+            $cert = Get-PfxCertificate -FilePath $pfxPath -Password $securePassword
+            $signature = Set-AuthenticodeSignature -FilePath (Join-Path $publishDir 'BedsideRemote.exe') -Certificate $cert -TimestampServer 'http://timestamp.digicert.com' -HashAlgorithm SHA256
+            if ($signature.Status -ne 'Valid') { throw "Windows executable signing failed: $($signature.Status)" }
+            $signed = $true
+          }
+          $iscc = $env:ISCC_PATH
+          if (-not (Test-Path -LiteralPath $iscc)) { throw 'The verified Inno Setup compiler is missing.' }
+          & $iscc "/DAppVersion=$env:APP_VERSION" "/DPublishDir=$publishDir" "/DOutputDir=$outputDir" windows/installer/bedside-remote.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $installers = @(Get-ChildItem -LiteralPath $outputDir -Filter '*setup.exe')
+          if ($installers.Count -ne 1) { throw 'Expected exactly one Windows installer.' }
+          $installer = $installers[0].FullName
+          $expected = Join-Path $outputDir "bedside-remote-windows-x64-v$env:APP_VERSION-setup.exe"
+          if ($installer -ne $expected) { Move-Item -LiteralPath $installer -Destination $expected }
+          if ($signed) {
+            $signature = Set-AuthenticodeSignature -FilePath $expected -Certificate $cert -TimestampServer 'http://timestamp.digicert.com' -HashAlgorithm SHA256
+            if ($signature.Status -ne 'Valid') { throw 'Installer signing failed.' }
+          }
+          $installDir = [IO.Path]::GetFullPath((Join-Path $env:RUNNER_TEMP 'BedsideRemote-install-smoke'))
+          $tempRoot = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+          if (-not $installDir.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Installer smoke target must stay inside RUNNER_TEMP.' }
+          $dataDir = Join-Path $env:LOCALAPPDATA 'BedsideRemote'
+          New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+          $sentinel = Join-Path $dataDir 'installer-smoke-sentinel'
+          Set-Content -LiteralPath $sentinel -Value 'preserve-user-data' -Encoding utf8
+          try {
+            foreach ($attempt in 1..2) {
+              $setup = Start-Process -FilePath $expected -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$installDir") -Wait -PassThru -WindowStyle Hidden
+              if ($setup.ExitCode -ne 0) { throw "Install/upgrade smoke failed: $($setup.ExitCode)" }
+              if (-not (Test-Path -LiteralPath (Join-Path $installDir 'BedsideRemote.exe'))) { throw 'Installed executable is missing.' }
+              $manifestPath = Join-Path $installDir 'native-host.json'
+              $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+              if ($manifest.name -ne 'com.bedside.remote' -or $manifest.allowed_extensions.Count -ne 1 -or $manifest.allowed_extensions[0] -ne 'bedside-remote@hugo2006alm' -or $manifest.path -ne (Join-Path $installDir 'BedsideRemote.exe')) { throw 'Installed Native Messaging manifest is invalid.' }
+              $registered = (Get-ItemProperty -LiteralPath 'HKCU:\Software\Mozilla\NativeMessagingHosts\com.bedside.remote').'(default)'
+              if ($registered -ne $manifestPath) { throw 'Native Messaging registration is missing.' }
+              if ((Get-Content -LiteralPath $sentinel -Raw).Trim() -ne 'preserve-user-data') { throw 'Upgrade changed user configuration.' }
+            }
+            $uninstall = Start-Process -FilePath (Join-Path $installDir 'unins000.exe') -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru -WindowStyle Hidden
+            if ($uninstall.ExitCode -ne 0) { throw 'Uninstall smoke failed.' }
+            if (Test-Path -LiteralPath 'HKCU:\Software\Mozilla\NativeMessagingHosts\com.bedside.remote') { throw 'Uninstall left Native Messaging registration behind.' }
+            if (-not (Test-Path -LiteralPath $sentinel)) { throw 'Uninstall removed saved user configuration.' }
+          } finally {
+            if (Test-Path -LiteralPath $sentinel) { Remove-Item -LiteralPath $sentinel }
+          }
+          @{ component = 'windows'; signed = $signed; reason = $(if ($signed) { '' } else { 'Authenticode certificate is not configured.' }) } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $outputDir 'windows-signing.json') -Encoding utf8
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-windows
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload Windows visual evidence
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-ui
+          path: ${{ runner.temp }}/windows-preview.png
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove temporary certificate
+        if: always()
+        shell: pwsh
+        run: |
+          $path = Join-Path $env:RUNNER_TEMP 'windows-signing.pfx'
+          if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path }

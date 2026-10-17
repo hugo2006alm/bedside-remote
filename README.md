@@ -54,6 +54,7 @@ Use JDK 17 + Android SDK 36, .NET SDK 10 and Node.js 24. Gradle's wrapper verifi
 dotnet restore windows/BedsideRemote.slnx
 dotnet build windows/BedsideRemote.slnx -c Release
 dotnet run --project windows/BedsideRemote.Tests -c Release
+dotnet run --project windows/BedsideRemote.IntegrationTests -c Release
 
 # Extension (from browser-extension/)
 npm ci

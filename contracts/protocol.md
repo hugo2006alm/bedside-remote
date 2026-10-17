@@ -15,6 +15,8 @@ This file is the shared implementation contract. All components must follow thes
 
 Every command: `{version:1,type:"command",id:<UUID>,sequence:<positive integer>,action:string,payload:object}`. Sequence strictly increases within each authenticated connection. No command replay after reconnect. Server replies `{version:1,type:"ack",id:string,ok:boolean,error?:string}`. Acknowledgement means command accepted/executed, not proof of browser autoplay success.
 
+Universal input remains responsive while browser work is pending. Admit only one slow browser operation at a time; reject additional work promptly with a busy error instead of executing stale queued commands. Native result timeout is 20 seconds; Android waits 25 seconds for browser/queue acknowledgements and 10 seconds for input. Cancel unexecuted work on disconnect.
+
 | Action | Payload |
 | --- | --- |
 | `input.key` | `{key:"up"|"down"|"left"|"right"|"enter"|"escape"|"home"|"backspace"|"tab"|"space"}`; Home means Windows Start menu. |
@@ -49,8 +51,8 @@ Send a full snapshot immediately after connection and after changes:
 
 Host name: `com.bedside.remote`; extension ID: `bedside-remote@hugo2006alm`. Windows registry host manifest under HKCU Mozilla NativeMessagingHosts. The agent executable supports `--native` and validates Firefox's extension ID argument before bridging framed JSON to a current-user-only named pipe. Browser frames use 4-byte little-endian UTF-8 byte length; limit 64 KiB. Never write diagnostics to stdout. Support multiple browser connections.
 
-Extension to host: `{version:1,type:"browser.state",activeTabId?:number,tabs:[<playback objects>]}`. Send when tabs/player state changes and at most once per second for progress. Also send `{version:1,type:"browser.result",id:string,ok:boolean,error?:string}` for results.
+Extension to host: `{version:1,type:"browser.state",activeTabId?:number,tabs:[<playback objects>]}`. At most 32 tabs per snapshot, with the selected tab first, also respecting the 64 KiB frame bound. Send when tabs/player state changes and at most once per second for progress. Also send `{version:1,type:"browser.result",id:string,ok:boolean,error?:string}` for results.
 
-Host to extension: `{version:1,type:"browser.command",id:string,tabId?:number,command:string,position?:number,url?:string}`. Commands are the browser command names above plus `openYoutube` (validated canonical YouTube URL; select suitable tab or create one). If tabId is absent, select active compatible tab. Avoid fixed mouse coordinates and private streaming APIs. A disconnected native host must reconnect with bounded backoff.
+Host to extension: `{version:1,type:"browser.command",id:string,tabId?:number,command:string,position?:number,url?:string}`. Commands are the browser command names above plus `openYoutube` (validated canonical YouTube URL; select suitable tab or create one) and `selectTab` (required compatible tabId, no URL/position; synchronize the remote target without invoking a player action). Android `browser.select` must synchronize this extension target before acknowledging success; actual browser/popup selection changes also update the agent target. If tabId is absent for a player command, select the active compatible tab. Avoid fixed mouse coordinates and private streaming APIs. A disconnected native host must reconnect with bounded backoff.
 
 Incompatible protocol changes require a new major protocol version. Application releases share one SemVer; protocol v1 components remain compatible across application patch/minor releases.

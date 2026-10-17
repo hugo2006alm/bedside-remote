@@ -1,0 +1,66 @@
+name: Extension CI
+on:
+  pull_request:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        default: 0.1.0-alpha.1
+      sign:
+        type: boolean
+        default: false
+    secrets:
+      MOZILLA_API_KEY:
+        required: false
+      MOZILLA_API_SECRET:
+        required: false
+permissions:
+  contents: read
+jobs:
+  extension:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: browser-extension
+    env:
+      APP_VERSION: ${{ inputs.version || '0.1.0-alpha.1' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: browser-extension/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+      - run: npm run lint:extension
+      - run: npm run package
+      - name: Sign or label development package
+        env:
+          WEB_EXT_API_KEY: ${{ github.event_name != 'pull_request' && secrets.MOZILLA_API_KEY || '' }}
+          WEB_EXT_API_SECRET: ${{ github.event_name != 'pull_request' && secrets.MOZILLA_API_SECRET || '' }}
+          SIGN_DISTRIBUTION: ${{ inputs.sign }}
+        run: |
+          mkdir -p ../artifacts
+          if [ "$SIGN_DISTRIBUTION" = "true" ] && [ -n "$WEB_EXT_API_KEY" ] && [ -n "$WEB_EXT_API_SECRET" ] && [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            npm run sign
+            count=$(find artifacts -maxdepth 1 -name '*.xpi' | wc -l)
+            test "$count" -eq 1
+            cp artifacts/*.xpi "../artifacts/bedside-remote-extension-v$APP_VERSION.xpi"
+            printf '{"component":"extension","signed":true}\n' > ../artifacts/extension-signing.json
+          else
+            cp artifacts/bedside_remote-*.zip "../artifacts/bedside-remote-extension-v$APP_VERSION-development.zip"
+            printf '{"component":"extension","signed":false,"reason":"Mozilla unlisted signing credentials are not configured."}\n' > ../artifacts/extension-signing.json
+          fi
+          cp artifacts/bedside-remote-source.zip "../artifacts/bedside-remote-extension-source-v$APP_VERSION.zip"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-extension
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 7

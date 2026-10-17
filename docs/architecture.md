@@ -3,7 +3,7 @@
 ## Components
 
 - **Android:** Kotlin, Jetpack Compose and Material 3, ViewModel/StateFlow, Coroutines, OkHttp for HTTPS/WSS, Android NSD and Keystore-backed credential encryption. Native sharing is the required YouTube selection flow; no Google credentials are collected.
-- **Windows:** C#/.NET 10 LTS, WPF control window and system tray, running as the logged-in user. ASP.NET Core/Kestrel provides the local TLS endpoint. Win32 input APIs provide an explicitly allowed set of universal actions; a Windows Service cannot interact with the user's desktop reliably and is unnecessary here.
+- **Windows:** C#/.NET 10 LTS, WPF control window and system tray, running as the logged-in user. WPF supports conventional self-contained deployment without adding the WinUI Windows App SDK bootstrap. ASP.NET Core/Kestrel provides the local TLS endpoint. Win32 input APIs provide an explicitly allowed set of universal actions; a Windows Service cannot interact with the user's desktop reliably and is unnecessary here.
 - **Extension:** TypeScript/WebExtensions for Firefox and Zen, with isolated YouTube and Netflix content adapters. Native Messaging connects the background extension to a per-user Windows bridge; a restricted named pipe connects bridge processes to the interactive agent. No website can connect to a localhost control port.
 - **Contracts:** [protocol v1](../contracts/protocol.md) defines messages, validation, queue ownership and compatibility. [Shared URL cases](../contracts/youtube-url-cases.json) guard cross-component link validation.
 
