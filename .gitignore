@@ -3,6 +3,7 @@
 **/obj/
 **/build/
 **/.gradle/
+**/.kotlin/
 **/node_modules/
 **/dist/
 **/coverage/
