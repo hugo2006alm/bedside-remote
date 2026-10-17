@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF><UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting><ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>BedsideRemote</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../BedsideRemote.Core/BedsideRemote.Core.csproj" />
+    <PackageReference Include="Haukcode.Mdns" Version="1.0.21" />
+  </ItemGroup>
+</Project>

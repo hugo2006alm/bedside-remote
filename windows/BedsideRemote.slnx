@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="BedsideRemote.Core/BedsideRemote.Core.csproj" />
+  <Project Path="BedsideRemote.Agent/BedsideRemote.Agent.csproj" />
+  <Project Path="BedsideRemote.Tests/BedsideRemote.Tests.csproj" />
+  <Project Path="BedsideRemote.IntegrationTests/BedsideRemote.IntegrationTests.csproj" />
+</Solution>
