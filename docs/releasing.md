@@ -24,6 +24,31 @@ References: [Android app signing](https://developer.android.com/studio/publish/a
 
 Temporary keystores/certificates are removed after jobs. Do not commit key material, upload it as a build artifact or disable signature enforcement to make an extension install normally.
 
+### Local credential setup
+
+Use PowerShell 7, an authenticated GitHub CLI and the GitHub account explicitly selected for the current session. The setup script checks that the active CLI account matches the supplied account before any writes. Secret values are sent to GitHub through standard input, never command-line arguments or console output.
+
+```powershell
+# Create once, or reuse, the persistent Android release identity (JDK 17 required).
+./scripts/configure-signing.ps1 -Component Android -GitHubAccount hugo2006alm
+
+# After creating a Mozilla developer account and obtaining API credentials:
+./scripts/configure-signing.ps1 -Component Mozilla -GitHubAccount hugo2006alm
+
+# Only when you have a trusted Authenticode PFX with an exportable private key:
+./scripts/configure-signing.ps1 -Component Windows -GitHubAccount hugo2006alm -PfxFile C:/private/publisher.pfx
+```
+
+Android setup is configured for this repository. Its RSA-4096 signing identity has 30-year validity and is stored outside Git at `%LOCALAPPDATA%/BedsideRemote/Signing/android`, restricted to the current Windows user and SYSTEM. Its password is encrypted with current-user Windows DPAPI. Re-running setup reuses the key; it never silently replaces an incomplete or existing identity. Back up the keystore **and the recoverable password** to a password manager before losing/reinstalling the Windows profile; copying the DPAPI password file alone is not a portable backup.
+
+The public certificate fingerprint is pinned in `android/signing-certificate.sha256`. CI verifies the signed APK against that pin and records it in the release manifest's Android signing report. Changing the pin or replacing the key requires an explicit signing migration decision. Upgrading from the initial debug-key alpha to the release-key APK requires uninstalling the debug version once, which removes its saved phone pairings; subsequent release-key updates retain the signing identity.
+
+For Mozilla, create a developer account, review the distribution terms and generate API credentials at [the developer API credentials page](https://addons.mozilla.org/developers/addon/api/key/). Run the Mozilla setup command in your own terminal; both inputs are hidden. Do not paste credentials into chat. Signing is not complete until Mozilla returns an approved signed XPI; initial review may require user action.
+
+Windows setup accepts an existing trusted code-signing certificate and checks its chain/private key before upload. A locally generated self-signed Windows certificate does not provide a publicly trusted publisher identity. See [Microsoft's signing options](https://learn.microsoft.com/windows/apps/package-and-deploy/code-signing-options) for certificate/service or Store distribution routes. Purchasing, identity verification and account terms require the publisher. The unsigned EXE remains usable for local testing; it does not satisfy the stable signing gate.
+
+At initial signing setup, Mozilla developer credentials, a trusted Windows publisher certificate and physical Android/browser acceptance evidence remain outstanding. Keep the release channel in alpha until these dependencies are actually resolved.
+
 Distribution packages retain third-party notices without selecting a license for the application source. Keep the Windows runtime notice copies synchronized with the runtime packs when updating the pinned .NET SDK; Android bundles its runtime dependency and font notices in assets.
 
 ## Artifacts and incomplete releases
