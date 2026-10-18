@@ -29,6 +29,7 @@ Required repository configuration: secret `SIGNPATH_API_TOKEN`; variables `SIGNP
 - Source and homepage: https://github.com/hugo2006alm/bedside-remote
 - Releases: https://github.com/hugo2006alm/bedside-remote/releases
 - License: MIT; copyright (c) 2026 hugo2006alm.
+- Privacy policy: https://github.com/hugo2006alm/bedside-remote/blob/main/docs/privacy.md
 - Description: Native Android companion controlling a Windows desktop over an encrypted, authenticated local network, with explicit device approval, universal input controls and optional Zen/Edge media integrations. No remote shell, credential collection or DRM bypass.
 - Windows artifacts: own `BedsideRemote.exe` and Inno Setup installer; self-contained Microsoft runtime and third-party DLLs retain their own signatures/notices and are not re-signed as project code.
 - Build: GitHub Actions, versioned source, pinned dependencies/actions, tests and installer smoke checks before publication.
