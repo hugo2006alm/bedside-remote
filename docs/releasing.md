@@ -47,7 +47,7 @@ For Mozilla, first sign in through [the Developer Hub](https://addons.mozilla.or
 
 Windows setup accepts an existing trusted code-signing certificate and checks its chain/private key before upload. A locally generated self-signed Windows certificate does not provide a publicly trusted publisher identity. See [Microsoft's signing options](https://learn.microsoft.com/windows/apps/package-and-deploy/code-signing-options) for certificate/service or Store distribution routes. Purchasing, identity verification and account terms require the publisher. The unsigned EXE remains usable for local testing; it does not satisfy the stable signing gate.
 
-At initial signing setup, Mozilla developer credentials, a trusted Windows publisher certificate and physical Android/browser acceptance evidence remain outstanding. Keep the release channel in alpha until these dependencies are actually resolved.
+Android signing and Mozilla unlisted signing are configured and verified in [v0.1.1-alpha.1](https://github.com/hugo2006alm/bedside-remote/releases/tag/v0.1.1-alpha.1). A trusted Windows publisher certificate and physical Android/browser acceptance evidence remain outstanding. Keep the release channel in alpha until these dependencies are actually resolved. Signed Android and XPI artifacts can already be used for that acceptance testing; Windows testing can use the explicitly unsigned installer.
 
 Distribution packages retain third-party notices without selecting a license for the application source. Keep the Windows runtime notice copies synchronized with the runtime packs when updating the pinned .NET SDK; Android bundles its runtime dependency and font notices in assets.
 
