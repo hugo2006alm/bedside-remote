@@ -8,6 +8,9 @@ test_status=$?
 
 output="$GITHUB_WORKSPACE/artifacts/android-ui"
 mkdir -p "$output"
+# The connected-test runner removes its target APK after instrumentation.
+# Install the built app again before capturing the standalone application.
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk || exit 1
 adb shell am force-stop com.bedside.remote
 adb shell am start -W -n com.bedside.remote/.MainActivity || exit 1
 # UI Automator waits for an idle window; inspect the actual initial screen.

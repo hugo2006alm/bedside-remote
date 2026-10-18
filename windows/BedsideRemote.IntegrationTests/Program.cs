@@ -63,10 +63,23 @@ try
     var intermediate = await ReadUntil(socket, x => x.GetProperty("type").GetString() == "state" && x.GetProperty("sessions").GetArrayLength() == 1 && x.GetProperty("sessions")[0].GetProperty("tabId").GetInt32() == 8);
     Check(intermediate.GetProperty("currentEntryId").GetString() != null && intermediate.GetProperty("activeSessionId").ValueKind == JsonValueKind.Null, "Pending queue selection survives target-tab removal and another active tab.");
     await SendNativeState(native, "dQw4w9WgXcQ", false);
-    await SendResult(native, openNow); Check((await Ack(socket, nowId)).GetProperty("ok").GetBoolean(), "Browser acknowledgement correlated.");
-    await SendNativeState(native, "dQw4w9WgXcQ", false);
-    var nextId = Guid.NewGuid().ToString(); await SendCommand(socket, nextId, 3, "youtube.enqueue", new { url = "https://youtu.be/abcdefghijk", mode = "last" });
-    Check((await Ack(socket, nextId)).GetProperty("ok").GetBoolean(), "Queue append acknowledged.");
+    var acknowledgementHeld = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    var releaseAcknowledgement = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    server.AfterAcknowledgementSent = async (id, cancellation) =>
+    {
+        if (id.ToString() != nowId) return;
+        acknowledgementHeld.TrySetResult();
+        await releaseAcknowledgement.Task.WaitAsync(cancellation);
+    };
+    try
+    {
+        await SendResult(native, openNow); Check((await Ack(socket, nowId)).GetProperty("ok").GetBoolean(), "Browser acknowledgement correlated.");
+        await acknowledgementHeld.Task.WaitAsync(token);
+        await SendNativeState(native, "dQw4w9WgXcQ", false);
+        var nextId = Guid.NewGuid().ToString(); await SendCommand(socket, nextId, 3, "youtube.enqueue", new { url = "https://youtu.be/abcdefghijk", mode = "last" });
+        Check((await Ack(socket, nextId)).GetProperty("ok").GetBoolean(), "Queue append is admitted while the previous observable ACK's send completion is deterministically held.");
+    }
+    finally { releaseAcknowledgement.TrySetResult(); server.AfterAcknowledgementSent = null; }
     await SendNativeState(native, "dQw4w9WgXcQ", true);
     var autoNext = await ReadNative(native);
     Check(autoNext.GetProperty("url").GetString() == "https://www.youtube.com/watch?v=abcdefghijk", "Natural ended transition opens next video.");
@@ -95,6 +108,21 @@ try
     await SendCommand(reconnected, replayId, 1, "queue.clear", new { }); Check(!(await Ack(reconnected, replayId)).GetProperty("ok").GetBoolean(), "Command ID replay across reconnect rejected.");
     var lowSequence = Guid.NewGuid().ToString(); await SendCommand(socket, lowSequence, 2, "queue.clear", new { });
     Check(!(await Ack(socket, lowSequence)).GetProperty("ok").GetBoolean(), "Out-of-order sequence rejected.");
+    using (var consecutive = await ConnectSocket(credential))
+    {
+        await Read(consecutive);
+        for (var sequence = 1; sequence <= 100; sequence++)
+        {
+            var id = Guid.NewGuid().ToString();
+            var shouldSucceed = sequence % 2 == 1;
+            await SendCommand(consecutive, id, sequence, shouldSucceed ? "queue.clear" : "queue.remove", shouldSucceed ? new { } : (object)new { entryId = "missing-entry" });
+            var completion = await Ack(consecutive, id);
+            if (completion.GetProperty("ok").GetBoolean() != shouldSucceed || !shouldSucceed && completion.GetProperty("error").GetString() != "Queue entry was removed.")
+                throw new Exception($"Consecutive command {sequence} returned an unexpected acknowledgement: {completion}");
+        }
+        Check(true, "100 consecutive ACK-followed browser/queue operations alternate success and expected errors without sleeps, retries or spurious busy rejection.");
+        for (var index = 0; index < 50; index++) { await Read(socket); await Read(reconnected); }
+    }
     Check(await NativeBridge.RunHostAsync(["--native", "wrong-extension@example"]) == 2, "Native host rejects unapproved extension.");
     var boundedStorage = new Storage(Path.Combine(root, "bounds"));
     var longTitle = new string('語', 512);

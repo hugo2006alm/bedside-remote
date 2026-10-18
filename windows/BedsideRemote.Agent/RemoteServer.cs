@@ -26,6 +26,7 @@ public sealed class RemoteServer
     public Func<string, CancellationToken, Task<bool>>? Approve { get; set; }
     public event Action? DevicesChanged;
     public int ActiveConnections => clients.Count;
+    internal Func<Guid, CancellationToken, Task>? AfterAcknowledgementSent { get; set; }
     public RemoteServer(Storage storage, Engine engine)
     {
         this.storage = storage; this.engine = engine;
@@ -154,14 +155,28 @@ public sealed class RemoteServer
         deadline.CancelAfter(TimeSpan.FromSeconds(20));
         try
         {
-            try { await ExecuteAndAcknowledgeAsync(client, command, deadline.Token); }
-            catch (OperationCanceledException) when (!token.IsCancellationRequested)
-            { await AcknowledgeAsync(client, command.Id, false, "Browser operation timed out. Check playback before trying again.", token); }
+            (bool Ok, string? Error) result;
+            try
+            {
+                try { result = await ExecuteAsync(client, command, deadline.Token); }
+                catch (OperationCanceledException) when (!token.IsCancellationRequested)
+                { result = (false, "Browser operation timed out. Check playback before trying again."); }
+            }
+            finally
+            {
+                // An observable completion ACK must mean that the next operation can be admitted.
+                browserAdmission.Release();
+            }
+            await AcknowledgeAsync(client, command.Id, result.Ok, result.Error, token);
         }
         catch (Exception ex) when (ex is OperationCanceledException or WebSocketException or ObjectDisposedException or IOException) { }
-        finally { browserAdmission.Release(); }
     }
     private async Task ExecuteAndAcknowledgeAsync(Client client, Command command, CancellationToken token)
+    {
+        var result = await ExecuteAsync(client, command, token);
+        await AcknowledgeAsync(client, command.Id, result.Ok, result.Error, token);
+    }
+    private async Task<(bool Ok, string? Error)> ExecuteAsync(Client client, Command command, CancellationToken token)
     {
         var ok = false; string? error = null;
         try
@@ -171,9 +186,13 @@ public sealed class RemoteServer
             await engine.ExecuteAsync(command, token); ok = true;
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or TimeoutException or UnauthorizedAccessException or System.ComponentModel.Win32Exception) { error = ex.Message; }
-        await AcknowledgeAsync(client, command.Id, ok, error, token);
+        return (ok, error);
     }
-    private static Task AcknowledgeAsync(Client client, Guid id, bool ok, string? error, CancellationToken token) => client.SendAsync(new { version = 1, type = "ack", id = id.ToString(), ok, error }, token);
+    private async Task AcknowledgeAsync(Client client, Guid id, bool ok, string? error, CancellationToken token)
+    {
+        await client.SendAsync(new { version = 1, type = "ack", id = id.ToString(), ok, error }, token);
+        if (AfterAcknowledgementSent is { } observeCompletion) await observeCompletion(id, token);
+    }
     public void Revoke(string deviceId)
     {
         lock (deviceLock) { devices.RemoveAll(x => x.DeviceId == deviceId); storage.Save("devices.dpapi", devices, true); }

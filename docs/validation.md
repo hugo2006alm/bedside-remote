@@ -11,10 +11,10 @@ Automated checks, integration checks and physical validation are separate eviden
 | Extension protocol, URL and HTML/media fixtures | `npm run check`, `npm test` | 14 tests passed locally, including target synchronization, bounded snapshots and reconnect behavior. |
 | Mozilla manifest/package validation | `npm run build`, `npm run lint:extension`, `npm run package` | Passed locally without validator notices/warnings. No AMO signing performed. |
 | Windows protocol, input validation, queue, pairing and framing | Windows core test executable | 89 checks passed locally, including a long-lived session exceeding 110,000 commands. |
-| Windows real transport and native integration | Windows integration executable with published native host and offscreen preview | 41 checks passed locally; pinned TLS/WSS, revocation, named pipes, WinExe framing, queue/navigation, responsive input, busy rejection and target selection. |
+| Windows real transport and native integration | Windows integration executable with published native host and offscreen preview | 42 checks passed locally; pinned TLS/WSS, revocation, named pipes, WinExe framing, queue/navigation, responsive input, busy rejection, ACK/admission race regression and target selection. |
 | Android protocol, shared URLs, local endpoint restrictions and pinned transport | Gradle unit tests | All 8 unit/TLS/WSS loopback tests passed locally. Wrong pin prevents the pairing secret from reaching HTTP. |
 | Android build and static checks | `spotlessCheck lint assembleDebug assembleDebugAndroidTest assembleRelease` | Passed locally; lint has no errors. Debug APK signature verified. Minified release build is unsigned without distribution credentials. |
-| Android native UI | Compose instrumentation tests, Actions API 35 Pixel 6 emulator and initial-screen capture | Instrumentation APK compiled locally; emulator execution is a required CI gate. See Actions for execution evidence. |
+| Android native UI | Compose instrumentation tests, Actions API 35 Pixel 6 emulator and initial-screen capture | Both Compose tests passed on the Actions emulator. Standalone screenshot capture reinstalls the APK after instrumentation teardown. See Actions for current execution evidence. |
 
 The three components consume a shared corpus of official YouTube URLs and spoofed/malformed URLs in `contracts/youtube-url-cases.json`. Tests never inject real desktop input into the user's applications.
 

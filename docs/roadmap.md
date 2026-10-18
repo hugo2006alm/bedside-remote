@@ -27,6 +27,7 @@ For these items, “planned” refers to investigation, not a delivery commitmen
 | Possibility | Priority | Dependencies / investigation | Acceptance criteria | Status |
 | --- | --- | --- | --- | --- |
 | Native YouTube search using an official solution. | P1 | Evaluate YouTube Data API credentials, quotas, policies and maintenance. Must not delay required sharing/queue flows. | If approved: search and play now/next/add to queue; handle errors and quota limits. | Planned |
+| QR-assisted pairing to avoid manually entering the full certificate fingerprint. | P2 | Evaluate a native scanning flow, camera permissions and trusted transfer of the endpoint/fingerprint. Temporary-code pairing remains the MVP flow. | If approved: fill connection details from a Windows-displayed QR code; retain identity verification, expiry and explicit local approval. | Planned |
 | Chrome/Edge extension, including possible Netflix fallback in Edge. | P2 | WebExtensions/Native Messaging compatibility, distribution and real DRM/playback tests; preserve Zen/Firefox quality. | Define after compatibility investigation. | Planned |
 | Silent automatic updates. | P3 | Reliable signing/distribution, protocol compatibility and preserved pairings/settings. | Define after investigation. Checking the latest version and opening its release is sufficient for MVP. | Planned |
 | Portable Windows distribution. | P3 | Concrete benefit over installer; Native Messaging registration and persisted data without installation. | Define after evaluating setup, updates and removal. | Planned |
