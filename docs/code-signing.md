@@ -36,6 +36,15 @@ Required repository configuration: secret `SIGNPATH_API_TOKEN`; variables `SIGNP
 - Privacy: commands/player metadata are exchanged only with the local Windows agent, the user's browser and explicitly paired phones. A user-requested release check opens GitHub. The software has no analytics or cloud control relay; Android may request official YouTube thumbnails when displaying them. Netflix/YouTube playback remains in the user's own browser/service session under those services' privacy policies. Streaming credentials and cookies are never collected or sent to Android.
 - Contact: supply your own email in the provider's form; it is intentionally not committed here.
 
+### Additional application fields
+
+- Tagline: **A secure Android remote for Windows with contextual media controls.**
+- Category: choose the closest available utilities/system-tools category. Maintainer type: individual. Build system: GitHub Actions.
+- Description: Bedside Remote is an Android companion for controlling a Windows desktop over an encrypted, authenticated local network. It combines universal remote input with contextual media controls in supported browsers and requires explicit approval before a device can connect.
+- Reputation: Bedside Remote is a new, actively maintained open-source project in alpha. It does not yet have established public adoption or independent media coverage. Its [public repository](https://github.com/hugo2006alm/bedside-remote) provides source code, [automated build and test results](https://github.com/hugo2006alm/bedside-remote/actions), [downloadable releases](https://github.com/hugo2006alm/bedside-remote/releases), and [documented validation](validation.md), including maintainer testing on physical devices. Do not claim independent adoption or press coverage without evidence.
+- Discovery channel: AI assistant, or the closest available option; exact source: **ChatGPT / Codex (OpenAI)**.
+- Leave Wikipedia and company blank when inapplicable. The maintainer supplies their real name/email, completes reCAPTCHA, and personally reads and accepts any required terms/data-processing consent. Marketing consent is optional.
+
 ## Other free route
 
 [Microsoft documents free Store signing for MSIX](https://learn.microsoft.com/windows/apps/package-and-deploy/code-signing-options) and [free developer onboarding](https://learn.microsoft.com/windows/apps/publish/partner-center/open-a-developer-account). This requires Store packaging, identity verification and certification. It does not sign the existing downloadable EXE installer. MSIX distribution is not implemented; it is an alternative if SignPath rejects the application, subject to a separate packaging decision.
