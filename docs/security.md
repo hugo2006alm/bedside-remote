@@ -28,6 +28,10 @@ Secrets belong in GitHub Actions secrets, never source control, artifacts or log
 
 See [releasing.md](releasing.md) for Android, Authenticode and Mozilla signing setup. Unsigned/development artifacts are explicitly labelled; stable publication requires configured signatures and recorded physical validation. Preserve signing identities and credentials across upgrades.
 
+### Open development dependency advisory
+
+As of 2026-10-18, [GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv) affects `node-forge` 1.4.0 through `web-ext` → `@devicefarmer/adbkit`; no patched version is listed. The affected signature-verification call is in adbkit's TCP/USB authentication path. This project's web-ext usage is limited to lint/build/Mozilla signing, not its Android remote-debugging features; node-forge is not bundled into the shipped browser scripts. Leave the Dependabot alert open, review upstream fixes before the next release and avoid adding web-ext Android debugging while this remains unresolved. This assessment does not declare the dependency fixed.
+
 ## Verification boundaries
 
 Automated validation covers protocol, queue, URL, adapter and release behavior; it cannot establish physical input reliability, Windows firewall behavior, OEM keyboard behavior or Netflix DRM compatibility. Real device/browser tests remain mandatory before claiming those properties or promoting a stable release. No analytics or cloud relay is required by the control protocol.
