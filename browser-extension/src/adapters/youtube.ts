@@ -14,7 +14,9 @@ export class YoutubeAdapter extends DomAdapter {
     let videoId: string | undefined;
     try { videoId = new URL(canonicalYoutube(this.doc.location.href)).searchParams.get('v') ?? undefined; } catch { /* Home and search pages have no video ID. */ }
     const title = (this.doc.querySelector(this.selectors.title)?.textContent?.trim() || this.doc.title.replace(/ - YouTube$/, '')).slice(0, 512);
-    const channel = this.doc.querySelector('#owner #channel-name, ytd-channel-name a, .ytmusic-player-bar .byline')?.textContent?.trim().slice(0, 512);
+    const channelNode = this.doc.querySelector('#owner #channel-name, ytd-channel-name, .ytmusic-player-bar .byline');
+    // YouTube's channel container can include hidden duplicate labels.
+    const channel = (channelNode?.querySelector('a')?.textContent ?? channelNode?.textContent)?.replace(/\s+/g, ' ').trim().slice(0, 512);
     // Canonical public thumbnail; never forward arbitrary image URLs or page tokens.
     return { title, ...(videoId ? { videoId, thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` } : {}), ...(channel ? { channel } : {}) };
   }

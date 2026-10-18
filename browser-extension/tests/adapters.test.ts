@@ -50,6 +50,13 @@ test('play/pause and seek verify media state; unavailable and gesture-only actio
   await assert.rejects(adapter.execute('fullscreen'), /requires a click/);
   dom.window.close();
 });
+
+test('YouTube channel metadata excludes hidden duplicate labels and collapses layout whitespace', async () => {
+  const { dom, adapter } = await fixture('youtube');
+  dom.window.document.querySelector('#channel-name')!.innerHTML = '<a>Bedside\n  channel</a><span hidden>Bedside channel</span>';
+  assert.equal(adapter.state(false).channel, 'Bedside channel');
+  dom.window.close();
+});
 test('autoplay denial is explicit and never reported as successful playback', async () => {
   const { dom, video, adapter } = await fixture('youtube');
   Object.defineProperty(video, 'play', { value: async () => { throw new Error('NotAllowedError'); } });
