@@ -6,7 +6,7 @@ Automated checks, integration checks and physical validation are separate eviden
 
 | Scope | Command / evidence | Result |
 | --- | --- | --- |
-| Release versioning and artifact safety | `node --test scripts/*.test.mjs` | 10 tests passed locally. |
+| Release versioning, artifact safety and APK certificate verification | `node --test scripts/*.test.mjs` | 15 tests passed locally, including current/legacy apksigner output and rejection of unexpected signing identities. |
 | GitHub Actions syntax/expressions | `actionlint` 1.7.12, verified official release checksum | Passed locally. |
 | Extension protocol, URL and HTML/media fixtures | `npm run check`, `npm test` | 14 tests passed locally, including target synchronization, bounded snapshots and reconnect behavior. |
 | Mozilla manifest/package validation | `npm run build`, `npm run lint:extension`, `npm run package` | Passed locally without validator notices/warnings. No AMO signing performed. |
