@@ -99,6 +99,7 @@ public sealed class RemoteServer
             if (!devices.Any(d => d.DeviceId == device.DeviceId)) { clients.TryRemove(connectionId, out _); socket.Abort(); return; }
         using var connectionLifetime = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
         Task pendingBrowser = Task.CompletedTask;
+        Task pendingText = Task.CompletedTask;
         try
         {
             await client.SendAsync(engine.Snapshot(), context.RequestAborted);
@@ -131,7 +132,12 @@ public sealed class RemoteServer
                     }
                 }
                 catch (InvalidOperationException ex) { await AcknowledgeAsync(client, command.Id, false, ex.Message, context.RequestAborted); continue; }
-                if (Engine.IsImmediate(command)) await ExecuteAndAcknowledgeAsync(client, command, connectionLifetime.Token);
+                if (command.Action == "input.text")
+                {
+                    if (!pendingText.IsCompleted) await AcknowledgeAsync(client, command.Id, false, "Text input is busy; this action was not queued.", connectionLifetime.Token);
+                    else pendingText = DispatchTextAsync(client, command, connectionLifetime.Token);
+                }
+                else if (Engine.IsImmediate(command)) await ExecuteAndAcknowledgeAsync(client, command, connectionLifetime.Token);
                 else if (!browserAdmission.Wait(0)) await AcknowledgeAsync(client, command.Id, false, "Browser is busy; wait for the current action and try again.", connectionLifetime.Token);
                 else pendingBrowser = DispatchBrowserAsync(client, command, connectionLifetime.Token);
             }
@@ -141,6 +147,7 @@ public sealed class RemoteServer
         {
             connectionLifetime.Cancel();
             await pendingBrowser;
+            await pendingText;
             clients.TryRemove(connectionId, out _);
             if (socket.State == WebSocketState.Open)
             {
@@ -148,6 +155,20 @@ public sealed class RemoteServer
                 try { await socket.CloseOutputAsync(WebSocketCloseStatus.PolicyViolation, "Connection ended.", closeTimeout.Token); } catch (Exception ex) when (ex is WebSocketException or OperationCanceledException) { }
             }
         }
+    }
+    private async Task DispatchTextAsync(Client client, Command command, CancellationToken token)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(300));
+        try
+        {
+            (bool Ok, string? Error) result;
+            try { result = await ExecuteAsync(client, command, deadline.Token); }
+            catch (OperationCanceledException) when (!token.IsCancellationRequested)
+            { result = (false, "Text input timed out. Some text may already have been entered; check the document before retrying."); }
+            await AcknowledgeAsync(client, command.Id, result.Ok, result.Error, token);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or WebSocketException or ObjectDisposedException or IOException) { }
     }
     private async Task DispatchBrowserAsync(Client client, Command command, CancellationToken token)
     {

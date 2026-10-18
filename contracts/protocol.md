@@ -15,7 +15,7 @@ This file is the shared implementation contract. All components must follow thes
 
 Every command: `{version:1,type:"command",id:<UUID>,sequence:<positive integer>,action:string,payload:object}`. Sequence strictly increases within each authenticated connection. No command replay after reconnect. Server replies `{version:1,type:"ack",id:string,ok:boolean,error?:string}`. Acknowledgement means command accepted/executed, not proof of browser autoplay success.
 
-Universal input remains responsive while browser work is pending. Admit only one slow browser operation at a time; reject additional work promptly with a busy error instead of executing stale queued commands. Native result timeout is 20 seconds; Android waits 25 seconds for browser/queue acknowledgements and 10 seconds for input. Cancel unexecuted work on disconnect.
+Universal input remains responsive while browser work is pending. Admit only one slow browser operation at a time; reject additional work promptly with a busy error instead of executing stale queued commands. Native result timeout is 20 seconds; Android waits 25 seconds for browser/queue acknowledgements and 10 seconds for ordinary input. Text delivery is paced and runs separately from socket reads, with a 300-second server deadline and a 315-second Android acknowledgement deadline for the maximum 4096 UTF-16 units. While text is being delivered, reject competing desktop input promptly instead of queueing it; browser/queue operations remain available. Stop text on foreground-window changes, disconnect or expiry. Some text may already have been entered when an error occurs; never automatically replay it.
 
 | Action | Payload |
 | --- | --- |

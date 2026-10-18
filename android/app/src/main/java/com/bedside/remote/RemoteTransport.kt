@@ -351,7 +351,8 @@ class RemoteTransport(
         val timeout =
             scope.launch {
                 delay(
-                    if (
+                    if (action == "input.text") 315000
+                    else if (
                         action.startsWith("browser.") ||
                             action.startsWith("queue.") ||
                             action == "youtube.enqueue"

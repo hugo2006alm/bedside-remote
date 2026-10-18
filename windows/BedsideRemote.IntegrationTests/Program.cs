@@ -13,15 +13,68 @@ using BedsideRemote.Core;
 
 var checks = 0;
 void Check(bool condition, string message) { if (!condition) throw new Exception(message); checks++; }
+var unicodeText = "Bedside Remote - café, ç 😀";
+var packets = new List<DesktopInput.Input[]>();
+var pauses = 0;
+await DesktopInput.TypeTextAsync(unicodeText, packets.Add, (_, _) => { pauses++; return Task.CompletedTask; }, CancellationToken.None);
+var decodedPackets = new string(packets.SelectMany(packet => packet.Where((_, index) => index % 2 == 0).Select(input => (char)input.Data.Keyboard.Scan)).ToArray());
+Check(decodedPackets == unicodeText && pauses == unicodeText.Length, "Paced Unicode packets preserve ASCII, accents and supplementary scalars.");
+Check(packets.All(packet => packet.Length == 2 && packet.Select((input, index) => input.Type == 1 && input.Data.Keyboard.VirtualKey == 0 && input.Data.Keyboard.Flags == (index % 2 == 0 ? 4u : 6u)).All(valid => valid)), "Every UTF-16 unit has its own Unicode key-down/up packet.");
+Check(System.Runtime.InteropServices.Marshal.SizeOf<DesktopInput.Input>() == (IntPtr.Size == 8 ? 40 : 28), "Native INPUT layout matches the operating-system ABI.");
+using (var cancelledTyping = new CancellationTokenSource())
+{
+    var emitted = 0;
+    try
+    {
+        await DesktopInput.TypeTextAsync("😀x", packet => { emitted += packet.Length; cancelledTyping.Cancel(); }, (_, cancellation) => cancellation.IsCancellationRequested ? Task.FromCanceled(cancellation) : Task.CompletedTask, cancelledTyping.Token);
+        throw new Exception("Cancelled typing continued.");
+    }
+    catch (OperationCanceledException) { Check(emitted == 4, "Cancellation stops before the next scalar and cannot leave half an emoji queued."); }
+}
+var layoutPackets = new List<DesktopInput.Input[]>();
+await DesktopInput.TypeTextAsync("aAé", layoutPackets.Add, (_, _) => Task.CompletedTask, CancellationToken.None, character => character switch { 'a' => 0x41, 'A' => 0x141, _ => -1 });
+Check(layoutPackets[0].Length == 2 && layoutPackets[0][0].Data.Keyboard.VirtualKey == 0x41 && layoutPackets[1].Length == 4 && layoutPackets[1][0].Data.Keyboard.VirtualKey == 0x10 && layoutPackets[1][^1].Data.Keyboard.Flags == 2 && layoutPackets[2][0].Data.Keyboard.Scan == 'é', "Text uses layout keys and balanced Shift, falling back to Unicode for unmapped characters.");
+layoutPackets.Clear();
+await DesktopInput.TypeTextAsync("aA", layoutPackets.Add, (_, _) => Task.CompletedTask, CancellationToken.None, character => character == 'a' ? (short)0x41 : (short)0x141, capsLock: true);
+Check(layoutPackets[0].Length == 4 && layoutPackets[1].Length == 2, "Layout text compensates for Caps Lock without toggling the user's setting.");
+var partialPackets = new List<DesktopInput.Input[]>();
+try
+{
+    DesktopInput.SendBatch(layoutPackets[0], packet => { partialPackets.Add(packet); return 1; });
+    throw new Exception("Partial native input was accepted.");
+}
+catch (InvalidOperationException)
+{
+    Check(partialPackets.Count == 2 && partialPackets[1].Length == 1 && partialPackets[1][0].Data.Keyboard.VirtualKey == 0x10 && partialPackets[1][0].Data.Keyboard.Flags == 2, "Partial native delivery releases the Shift key introduced by the text packet and reports failure.");
+}
+var rejectedPackets = 0;
+try { DesktopInput.SendBatch(layoutPackets[0], _ => { rejectedPackets++; return 0; }); throw new Exception("Rejected native input was accepted."); }
+catch (InvalidOperationException) { Check(rejectedPackets == 1, "Zero accepted input events cannot trigger an unnecessary Shift release."); }
 var root = Path.Combine(Path.GetTempPath(), "BedsideRemote-tests-" + Guid.NewGuid().ToString("N"));
 var injectedInputs = 0;
-var storage = new Storage(root); var engine = new Engine(storage, _ => Interlocked.Increment(ref injectedInputs)); var server = new RemoteServer(storage, engine);
+var blockText = false;
+var textStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+var textStopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+var storage = new Storage(root);
+var engine = new Engine(storage, desktopInputAsync: async (command, cancellation) =>
+{
+    if (blockText && command.Action == "input.text")
+    {
+        textStarted.TrySetResult();
+        try { await Task.Delay(Timeout.Infinite, cancellation); }
+        finally { textStopped.TrySetResult(); }
+    }
+    else Interlocked.Increment(ref injectedInputs);
+});
+var server = new RemoteServer(storage, engine);
 using var certificate = storage.Certificate();
 using (var reloaded = storage.Certificate()) Check(certificate.Thumbprint == reloaded.Thumbprint, "TLS identity must survive restart.");
 var pin = SHA256.HashData(certificate.RawData);
 using var lifetime = new CancellationTokenSource(TimeSpan.FromSeconds(45)); var token = lifetime.Token;
 var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start(); var port = ((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop();
-var nativeTask = new NativeBridge(engine).ListenAsync(token);
+var isolatedNative = args.Contains("--isolate-native", StringComparer.Ordinal);
+var nativePipeName = isolatedNative ? "BedsideRemote-tests-" + Guid.NewGuid().ToString("N") : NativeBridge.PipeName;
+var nativeTask = new NativeBridge(engine, nativePipeName).ListenAsync(token);
 try
 {
     await server.StartAsync(port, certificate, token);
@@ -46,7 +99,7 @@ try
     await ExpectSocketRejection(null, null); await ExpectSocketRejection(credential, "https://evil.example");
     using var socket = await ConnectSocket(credential); var initial = await Read(socket);
     Check(initial.GetProperty("type").GetString() == "state" && !initial.GetProperty("extensionConnected").GetBoolean(), "Initial universal state without extension.");
-    using var native = new NamedPipeClientStream(".", NativeBridge.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+    using var native = new NamedPipeClientStream(".", nativePipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
     await native.ConnectAsync(5000, token);
     await SendNativeState(native, "dQw4w9WgXcQ", false);
     var browserState = await ReadUntil(socket, x => x.GetProperty("type").GetString() == "state" && x.GetProperty("sessions").GetArrayLength() == 1);
@@ -123,6 +176,35 @@ try
         Check(true, "100 consecutive ACK-followed browser/queue operations alternate success and expected errors without sleeps, retries or spurious busy rejection.");
         for (var index = 0; index < 50; index++) { await Read(socket); await Read(reconnected); }
     }
+    using (var typing = await ConnectSocket(credential))
+    {
+        await Read(typing);
+        blockText = true;
+        await SendCommand(typing, Guid.NewGuid().ToString(), 1, "input.text", new { text = unicodeText });
+        await textStarted.Task.WaitAsync(token);
+        var keyId = Guid.NewGuid().ToString();
+        await SendCommand(typing, keyId, 2, "input.key", new { key = "right" });
+        var rejectedKey = await Ack(typing, keyId);
+        Check(!rejectedKey.GetProperty("ok").GetBoolean() && rejectedKey.GetProperty("error").GetString()!.Contains("not queued", StringComparison.Ordinal), "Long text does not block socket reads; competing desktop actions are rejected instead of delayed.");
+        var textId = Guid.NewGuid().ToString();
+        await SendCommand(typing, textId, 3, "input.text", new { text = "must not run later" });
+        Check(!(await Ack(typing, textId)).GetProperty("ok").GetBoolean(), "A second text submission is rejected without queueing.");
+        var clearId = Guid.NewGuid().ToString();
+        await SendCommand(typing, clearId, 4, "queue.clear", new { });
+        Check((await Ack(typing, clearId)).GetProperty("ok").GetBoolean(), "Browser/queue operations remain available during long text delivery.");
+        typing.Abort();
+        await textStopped.Task.WaitAsync(token);
+        blockText = false;
+    }
+    // Wait for connection cleanup, which awaits typing cancellation before releasing it.
+    for (var attempt = 0; attempt < 40 && server.ActiveConnections != 2; attempt++) await Task.Delay(25, token);
+    using (var afterTyping = await ConnectSocket(credential))
+    {
+        await Read(afterTyping);
+        var keyId = Guid.NewGuid().ToString();
+        await SendCommand(afterTyping, keyId, 1, "input.key", new { key = "right" });
+        Check((await Ack(afterTyping, keyId)).GetProperty("ok").GetBoolean(), "Disconnect cancels text delivery and releases desktop input for the next connection.");
+    }
     Check(await NativeBridge.RunHostAsync(["--native", "wrong-extension@example"]) == 2, "Native host rejects unapproved extension.");
     var boundedStorage = new Storage(Path.Combine(root, "bounds"));
     var longTitle = new string('語', 512);
@@ -154,6 +236,7 @@ try
     var nativeExeArgument = args.FirstOrDefault(x => x.StartsWith("--native-exe=", StringComparison.Ordinal));
     if (nativeExeArgument != null)
     {
+        if (isolatedNative) throw new ArgumentException("--native-exe requires the default pipe; stop the installed agent first or omit --native-exe.");
         var executable = Path.GetFullPath(nativeExeArgument["--native-exe=".Length..]);
         var start = new System.Diagnostics.ProcessStartInfo(executable) { RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
         start.ArgumentList.Add(Path.Combine(root, "native-host.json")); start.ArgumentList.Add(NativeBridge.ExtensionId);

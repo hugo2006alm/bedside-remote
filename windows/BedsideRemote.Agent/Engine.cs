@@ -7,8 +7,8 @@ public sealed class Engine
 {
     private readonly object sync = new();
     private readonly Storage storage;
-    private readonly Action<Command> desktopInput;
-    private static readonly object DesktopSync = new();
+    private readonly Func<Command, CancellationToken, Task> desktopInput;
+    private static readonly SemaphoreSlim DesktopSync = new(1);
     private readonly SemaphoreSlim browserCommands = new(1);
     private readonly PlaybackQueue queue;
     private readonly Dictionary<string, NativeConnection> native = [];
@@ -18,10 +18,10 @@ public sealed class Engine
     private string? pendingConnectionId;
     private int? pendingTabId;
     public event Action? Changed;
-    public Engine(Storage storage, Action<Command>? desktopInput = null)
+    public Engine(Storage storage, Action<Command>? desktopInput = null, Func<Command, CancellationToken, Task>? desktopInputAsync = null)
     {
         this.storage = storage;
-        this.desktopInput = desktopInput ?? DesktopInput.Execute;
+        this.desktopInput = desktopInputAsync ?? (desktopInput == null ? DesktopInput.ExecuteAsync : (command, _) => { desktopInput(command); return Task.CompletedTask; });
         queue = new(storage.Read<QueueSnapshot>("queue.json"));
     }
     public object Snapshot()
@@ -136,7 +136,13 @@ public sealed class Engine
     public async Task ExecuteAsync(Command command, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        if (IsImmediate(command)) { lock (DesktopSync) { token.ThrowIfCancellationRequested(); desktopInput(command); } return; }
+        if (IsImmediate(command))
+        {
+            if (!DesktopSync.Wait(0)) throw new InvalidOperationException("Desktop input is busy. Wait for it to finish; this action was not queued.");
+            try { token.ThrowIfCancellationRequested(); await desktopInput(command, token); }
+            finally { DesktopSync.Release(); }
+            return;
+        }
         await browserCommands.WaitAsync(token);
         try { await ExecuteBrowserAsync(command, token); }
         finally { browserCommands.Release(); }

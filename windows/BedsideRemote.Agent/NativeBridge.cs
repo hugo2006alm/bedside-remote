@@ -42,9 +42,13 @@ public sealed class NativeConnection(string id, Stream stream) : IDisposable
     }
 }
 
-public sealed class NativeBridge(Engine engine)
+public sealed class NativeBridge
 {
+    private readonly Engine engine;
+    private readonly string pipeName;
     private readonly SemaphoreSlim connectionSlots = new(8);
+    public NativeBridge(Engine engine) : this(engine, PipeName) { }
+    internal NativeBridge(Engine engine, string pipeName) { this.engine = engine; this.pipeName = pipeName; }
     public const string ExtensionId = "bedside-remote@hugo2006alm";
     public static string PipeName => "BedsideRemote-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(WindowsIdentity.GetCurrent().User!.Value)))[..24];
     public async Task ListenAsync(CancellationToken cancellationToken)
@@ -53,7 +57,7 @@ public sealed class NativeBridge(Engine engine)
         {
             await connectionSlots.WaitAsync(cancellationToken);
             NamedPipeServerStream pipe;
-            try { pipe = new NamedPipeServerStream(PipeName, PipeDirection.InOut, 8, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly); }
+            try { pipe = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 8, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly); }
             catch { connectionSlots.Release(); throw; }
             try { await pipe.WaitForConnectionAsync(cancellationToken); }
             catch { pipe.Dispose(); connectionSlots.Release(); throw; }
