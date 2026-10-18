@@ -29,6 +29,8 @@ Firefox 142 or later is required. This baseline consistently supports the built-
 
 The Firefox Manifest V3 background script uses a Native Messaging port and restores state by requesting snapshots from existing content scripts. After disconnect it retries with a bounded 1–30 second backoff; a 30-second alarm restores the event page if it was suspended. Commands are serialized; old commands are not replayed on reconnect. The browser handles native framing; application messages are limited to 64 KiB UTF-8 and 32 players. Snapshots prioritize the selected target and include only the players that fit both limits. The popup retains all compatible tabs so selecting an omitted tab brings it into the next native snapshot.
 
+The popup includes the browser's disconnect reason when available. For `No such native application com.bedside.remote`, verify the Windows installer's current-user registration at `HKCU\Software\Mozilla\NativeMessagingHosts\com.bedside.remote`, the referenced JSON file, and the installed add-on ID (`bedside-remote@hugo2006alm`). A manifest validation or extension allowlist failure can also prevent host discovery; the browser console may provide a more specific error. Keep the allowlist restricted to this add-on.
+
 ## Player behavior and practical limits
 
 - Remote **Play** calls standard `video.play()` and reports autoplay denial. Opening a YouTube URL waits for a usable player and attempts playback; consent/interstitial pages and autoplay restrictions produce explicit errors. The host acknowledgement is not proof that streaming playback succeeded.

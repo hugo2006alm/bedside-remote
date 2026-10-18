@@ -18,6 +18,7 @@ test('background tracks multiple tabs, explicit selection, reload and native com
   const nativeOut: Record<string, unknown>[] = [];
   const playerCommands: { tabId: number; message: unknown }[] = [];
   let connections = 0;
+  let nativeError: { message: string } | undefined;
   const url = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
   const live = new Map([[1, { id: 1, url, active: true }], [2, { id: 2, url: 'https://www.netflix.com/watch/123', active: false }]]);
   const timers = new Set<ReturnType<typeof setTimeout>>();
@@ -28,7 +29,7 @@ test('background tracks multiple tabs, explicit selection, reload and native com
       id: 'bedside-remote@hugo2006alm', onMessage: runtimeMessage,
       getURL: (path: string) => `moz-extension://fixture/${path}`,
       getManifest: () => ({ host_permissions: ['https://www.youtube.com/*'] }),
-      connectNative: () => { connections++; return { onMessage: nativeMessage, onDisconnect: nativeDisconnect, postMessage: (message: Record<string, unknown>) => nativeOut.push(message), disconnect: () => {} }; }
+      connectNative: () => { connections++; return { get error() { return nativeError; }, onMessage: nativeMessage, onDisconnect: nativeDisconnect, postMessage: (message: Record<string, unknown>) => nativeOut.push(message), disconnect: () => {} }; }
     },
     tabs: {
       get: async (id: number) => live.get(id), query: async () => [],
@@ -82,7 +83,12 @@ test('background tracks multiple tabs, explicit selection, reload and native com
     await new Promise(resolve => setTimeout(resolve, 5));
     assert.equal(nativeOut.at(-1)!.ok, false);
     assert.equal(playerCommands.length, 1, 'invalid command must never reach a player');
+    nativeError = { message: 'No such native application com.bedside.remote' };
     nativeDisconnect.emit();
+    const disconnected = await runtimeMessage.emit({ type: 'popup.status' }, { id: api.runtime.id, url: api.runtime.getURL('popup.html') })[0] as { connected: boolean; error: string };
+    assert.equal(disconnected.connected, false);
+    assert.match(disconnected.error, /No such native application com\.bedside\.remote/, 'the popup must expose the actual browser disconnect reason');
+    nativeError = undefined;
     await new Promise(resolve => setTimeout(resolve, 1100));
     assert.equal(connections, 2, 'native host disconnect retries with bounded backoff');
     assert.equal(nativeOut.at(-1)!.type, 'browser.state', 'reconnection sends a fresh snapshot, never replays player commands');

@@ -22,11 +22,15 @@ The three components consume a shared corpus of official YouTube URLs and spoofe
 
 [v0.1.1-alpha.1](https://github.com/hugo2006alm/bedside-remote/releases/tag/v0.1.1-alpha.1) was published by [a fully successful pipeline](https://github.com/hugo2006alm/bedside-remote/actions/runs/39112985683). Its manifest records Android and Mozilla signing as complete, Windows Authenticode as missing, and physical acceptance as incomplete. All eight published asset digests match the release checksum file; downloaded APK, XPI, source and metadata hashes were also checked. This remains a development prerelease.
 
-The released Windows installer was also installed on the development PC. The running installed agent served protocol v1 over TLS pinned to its stored certificate and rejected a valid unauthenticated WebSocket handshake with HTTP 401. This test sent no desktop input. A temporary Firefox launch loaded the extension, but the UI automation runtime failed, so no live playback success is claimed from that attempt.
+The released Windows installer was also installed on the development PC. The running installed agent served protocol v1 over TLS pinned to its stored certificate and rejected a valid unauthenticated WebSocket handshake with HTTP 401. This test sent no desktop input.
+
+Physical testing on 2026-10-18 used a Nothing A059P running Android 17 (API 37) and the exact signed v0.1.1-alpha.1 APK. Installation, manual LAN pairing with the agent certificate fingerprint and temporary code, explicit approval on Windows, secure connection, and automatic reconnection after force-stop/relaunch passed. Reinstalling the same signed APK preserved pairing and reconnected; this does not establish version-to-version upgrade behavior. Light/dark appearance was checked and restored to dark. Automatic LAN discovery did not find the PC in this network; its cause remains unresolved.
+
+The signed extension was installed in Zen. Its native connection failed with `No such native application com.bedside.remote`; live playback and queue acceptance remain blocked on that investigation. Both Windows registry views contain the expected current-user host registration, the manifest is valid UTF-8 without a BOM, and a direct framed-message probe of the installed executable connected to the running agent and exited normally. These checks do not establish a working connection from Zen. Windows UI automation was unavailable because its runtime failed to initialize.
 
 ## Physical acceptance checklist
 
-No Android device was connected during initial implementation. The following remain pending until actually executed and recorded with device/browser versions:
+The observations above are partial physical evidence. The following checklist remains open until all relevant cases are executed and recorded with device/browser versions:
 
 - Install/update APK and Windows setup; verify settings/pairings survive matching-key upgrades. Install the signed extension when Mozilla credentials are configured.
 - Pair across the LAN with the displayed fingerprint, code and explicit Windows approval; reject incorrect fingerprint/code; verify reconnect, manual connection, discovery, revocation of an active client and firewall private-network behavior.

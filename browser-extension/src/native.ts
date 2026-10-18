@@ -1,6 +1,12 @@
 import { HOST_NAME } from './protocol';
 
 export const reconnectDelay = (attempt: number): number => Math.min(30_000, 1000 * 2 ** Math.min(5, Math.max(0, attempt)));
+function failureMessage(cause: unknown, fallback: string): string {
+  const detail = typeof cause === 'object' && cause !== null && 'message' in cause ? cause.message : undefined;
+  return typeof detail === 'string' && detail.trim()
+    ? `${fallback} ${detail.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 300)}`
+    : fallback;
+}
 export class NativeLink {
   private port: browser.runtime.Port | null = null;
   private retry: ReturnType<typeof setTimeout> | undefined;
@@ -18,15 +24,15 @@ export class NativeLink {
       port.onDisconnect.addListener(() => {
         if (this.port !== port) return;
         this.port = null;
-        this.lastError = 'Windows agent disconnected or Native Messaging host is not registered.';
+        this.lastError = failureMessage(port.error, 'Windows agent disconnected or Native Messaging host is not registered.');
         this.changed();
         this.retry = setTimeout(() => this.connect(), reconnectDelay(this.attempts++));
       });
       this.lastError = '';
       this.changed();
-    } catch {
+    } catch (cause) {
       this.port = null;
-      this.lastError = 'Cannot connect to the Windows Native Messaging host.';
+      this.lastError = failureMessage(cause, 'Cannot connect to the Windows Native Messaging host.');
       this.changed();
       this.retry = setTimeout(() => this.connect(), reconnectDelay(this.attempts++));
     }
