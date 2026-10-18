@@ -13,6 +13,9 @@ using BedsideRemote.Core;
 
 var checks = 0;
 void Check(bool condition, string message) { if (!condition) throw new Exception(message); checks++; }
+Check(DiscoveryAddresses.Encode(new[] { "100.65.203.96", "192.168.1.28", "127.0.0.1", "8.8.8.8", "192.168.1.28", "fd12::1" }.Select(IPAddress.Parse)) == "192.168.1.28", "Discovery TXT hints contain distinct private IPv4 addresses only, excluding VPN CGNAT, public and loopback addresses.");
+var discoveryHints = DiscoveryAddresses.Encode(Enumerable.Range(1, 100).Select(index => IPAddress.Parse($"192.168.100.{index}")));
+Check(Encoding.UTF8.GetByteCount("addresses=" + discoveryHints) <= 255 && discoveryHints.Split(',').Length <= 16 && discoveryHints.Split(',').All(address => IPAddress.TryParse(address, out _)), "Discovery TXT hints are bounded without truncating an address.");
 var unicodeText = "Bedside Remote - café, ç 😀";
 var packets = new List<DesktopInput.Input[]>();
 var pauses = 0;

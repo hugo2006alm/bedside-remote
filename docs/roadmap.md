@@ -31,6 +31,7 @@ For these items, “planned” refers to investigation, not a delivery commitmen
 | Chrome/Edge extension, including possible Netflix fallback in Edge. | P2 | WebExtensions/Native Messaging compatibility, distribution and real DRM/playback tests; preserve Zen/Firefox quality. | Define after compatibility investigation. | Planned |
 | Silent automatic updates. | P3 | Reliable signing/distribution, protocol compatibility and preserved pairings/settings. | Define after investigation. Checking the latest version and opening its release is sufficient for MVP. | Planned |
 | Portable Windows distribution. | P3 | Concrete benefit over installer; Native Messaging registration and persisted data without installation. | Define after evaluating setup, updates and removal. | Planned |
+| Optional clipboard-assisted insertion for long text. | P3 | Investigate explicit opt-in, clipboard formats/history, restoration races and target-app compatibility; retain current keyboard input. | Define after feasibility/privacy review; no clipboard contents may be transmitted back to Android. | Planned |
 
 ## Maintenance
 

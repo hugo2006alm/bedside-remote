@@ -15,6 +15,8 @@ Release builds accept `-PversionName=X.Y.Z -PversionCode=N`. Set `ANDROID_KEYSTO
 
 Open the Windows pairing window, then choose a discovered computer or enter its numeric private IP address and port. Enter the complete SHA-256 fingerprint shown on Windows, compare every digit, enter the six-digit code, and approve the phone on Windows. Discovery does not establish trust. Tokens and computer details are encrypted with an Android Keystore AES-GCM key; backups are disabled.
 
+Discovery considers all resolved addresses on Android 14 and later, with optional bounded Windows TXT hints for earlier Android versions. It rejects public, CGNAT and loopback discovery addresses and prefers an address on one of the phone's local subnets. A discovered address still requires the complete certificate fingerprint and Windows approval.
+
 Remote works independently of the browser extension. Touch offers pointer movement, tap, long-press/right click and two-finger scroll, plus explicit accessible click/scroll buttons. Keyboard sends Unicode text to the focused Windows field. Share an official HTTPS YouTube link to Bedside Remote or paste one in Queue, then choose Play now, Play next or Add to queue. Queue changes are acknowledged by Windows; playback may still require a browser gesture because of autoplay restrictions.
 
 App connections close while backgrounded and reconnect on return. Commands are never replayed after reconnect. Revoke phones in Windows; Forget removes credentials from this phone only.

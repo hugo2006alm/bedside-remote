@@ -36,7 +36,7 @@ public static class Program
                     _ = RunNativeListenerAsync(new NativeBridge(engine), window, cancellation.Token);
                     try
                     {
-                        discovery = new MdnsAdvertiser(new ServiceProfile(Environment.MachineName, "_bedside-remote._tcp", (ushort)settings.Port, new Dictionary<string, string> { ["version"] = "1" }));
+                        discovery = new MdnsAdvertiser(new ServiceProfile(Environment.MachineName, "_bedside-remote._tcp", (ushort)settings.Port, new Dictionary<string, string> { ["version"] = "1", ["addresses"] = DiscoveryAddresses.ReadLocal() }));
                         discovery.Start();
                     }
                     catch (Exception ex) when (ex is System.Net.Sockets.SocketException or InvalidOperationException) { window.SetStatus("Ready · automatic discovery unavailable; use a manual address", false); }

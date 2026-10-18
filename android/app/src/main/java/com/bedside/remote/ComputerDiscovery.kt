@@ -3,6 +3,8 @@ package com.bedside.remote
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.os.Build
+import java.net.NetworkInterface
 import java.util.ArrayDeque
 
 data class DiscoveredComputer(val name: String, val host: String, val port: Int)
@@ -82,12 +84,37 @@ class ComputerDiscovery(
                     synchronized(this@ComputerDiscovery) {
                         if (current == epoch) {
                             val version = info.attributes["version"]?.toString(Charsets.UTF_8)
-                            val host = info.host?.hostAddress
-                            if (
-                                version == "1" &&
-                                    host != null &&
-                                    runCatching { LocalEndpoint.address(host) }.isSuccess
-                            ) {
+                            val resolved =
+                                if (Build.VERSION.SDK_INT >= 34) info.hostAddresses
+                                else listOfNotNull(info.host)
+                            // Older NSD APIs expose only the first A record, which may be a VPN.
+                            val hints =
+                                info.attributes["addresses"]
+                                    ?.takeIf { it.size <= 245 }
+                                    ?.toString(Charsets.UTF_8)
+                                    ?.split(',')
+                                    ?.take(16)
+                                    .orEmpty()
+                            val subnets =
+                                runCatching {
+                                        NetworkInterface.getNetworkInterfaces()
+                                            .toList()
+                                            .filter { it.isUp && !it.isLoopback }
+                                            .flatMap { it.interfaceAddresses }
+                                            .map {
+                                                DiscoverySubnet(
+                                                    it.address,
+                                                    it.networkPrefixLength.toInt(),
+                                                )
+                                            }
+                                    }
+                                    .getOrDefault(emptyList())
+                            val host =
+                                DiscoveryHost.select(
+                                    resolved.mapNotNull { it.hostAddress } + hints,
+                                    subnets,
+                                )
+                            if (version == "1" && host != null && info.port in 1..65535) {
                                 devices[info.serviceName] =
                                     DiscoveredComputer(info.serviceName, host, info.port)
                                 onDevices(devices.values.toList())
