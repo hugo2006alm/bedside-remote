@@ -6,6 +6,7 @@
 **/.kotlin/
 **/node_modules/
 **/dist/
+**/dist-edge/
 **/coverage/
 **/web-ext-artifacts/
 **/local.properties

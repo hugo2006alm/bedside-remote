@@ -1,11 +1,15 @@
 #requires -Version 7.0
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)][ValidateSet('Android', 'Mozilla', 'Windows')][string]$Component,
+    [Parameter(Mandatory)][ValidateSet('Android', 'Mozilla', 'Windows', 'SignPath')][string]$Component,
     [Parameter(Mandatory)][string]$GitHubAccount,
     [string]$Repository = 'hugo2006alm/bedside-remote',
     [string]$AndroidSigningDirectory = (Join-Path $env:LOCALAPPDATA 'BedsideRemote/Signing/android'),
-    [string]$PfxFile
+    [string]$PfxFile,
+    [string]$SignPathOrganizationId,
+    [string]$SignPathProjectSlug = 'bedside-remote',
+    [string]$SignPathSigningPolicySlug = 'release-signing',
+    [string]$SignPathCertificateThumbprint
 )
 
 Set-StrictMode -Version Latest
@@ -46,7 +50,30 @@ function Read-SecretText([string]$Prompt) {
     return [Net.NetworkCredential]::new('', $secure).Password
 }
 
+function Set-RepositoryVariable([string]$Name, [string]$Value) {
+    & $ghPath variable set $Name --body $Value --repo $Repository
+    if ($LASTEXITCODE -ne 0) { throw "Could not save repository variable: $Name" }
+}
+
 switch ($Component) {
+    'SignPath' {
+        if (!$SignPathOrganizationId) { $SignPathOrganizationId = Read-Host 'Approved SignPath organization ID' }
+        if (!$SignPathCertificateThumbprint) { $SignPathCertificateThumbprint = Read-Host 'Production certificate SHA-1 thumbprint (40 hex digits)' }
+        $organizationGuid = [Guid]::Empty
+        if (![Guid]::TryParse($SignPathOrganizationId, [ref]$organizationGuid)) { throw 'Invalid SignPath organization ID.' }
+        foreach ($slug in @($SignPathProjectSlug, $SignPathSigningPolicySlug)) {
+            if ($slug -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$') { throw 'Invalid SignPath project or policy slug.' }
+        }
+        if ($SignPathCertificateThumbprint -notmatch '^[A-Fa-f0-9]{40}$') { throw 'Invalid production certificate thumbprint.' }
+        $apiToken = Read-SecretText 'Approved SignPath submitter API token (hidden)'
+        try { Set-RepositorySecret 'SIGNPATH_API_TOKEN' $apiToken } finally { $apiToken = $null }
+        Set-RepositoryVariable 'SIGNPATH_ORGANIZATION_ID' $SignPathOrganizationId
+        Set-RepositoryVariable 'SIGNPATH_PROJECT_SLUG' $SignPathProjectSlug
+        Set-RepositoryVariable 'SIGNPATH_SIGNING_POLICY_SLUG' $SignPathSigningPolicySlug
+        Set-RepositoryVariable 'SIGNPATH_CERTIFICATE_THUMBPRINT' $SignPathCertificateThumbprint.ToUpperInvariant()
+        Set-RepositoryVariable 'WINDOWS_SIGNING_PROVIDER' 'signpath'
+        Write-Output 'SignPath configured. Releases require approval of agent and installer signing requests. Do not use a test certificate.'
+    }
     'Android' {
         $keytool = (Get-Command keytool -ErrorAction Stop).Source
         $directory = [IO.Path]::GetFullPath($AndroidSigningDirectory)

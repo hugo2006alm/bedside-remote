@@ -23,7 +23,10 @@ async function refresh() {
     target.value = selection;
     const state = status.tabs.find(tab => tab.tabId === status.activeTabId);
     player.textContent = state?.error ?? (state ? `${state.paused ? 'Paused' : 'Playing'} · ${Math.floor(state.position)} seconds` : 'Waiting for a player.');
-  } catch { connection.textContent = 'Extension background unavailable. Reopen this popup.'; }
+  } catch (cause) {
+    connection.textContent = 'Extension background unavailable. Reopen this popup.';
+    detail.textContent = cause instanceof Error ? cause.message.slice(0, 300) : 'The browser did not return a background response.';
+  }
 }
 target.addEventListener('change', () => { void browser.runtime.sendMessage({ type: 'popup.select', tabId: Number(target.value) }).then(refresh); });
 reconnect.addEventListener('click', () => { void browser.runtime.sendMessage({ type: 'popup.reconnect' }).then(refresh); });

@@ -13,6 +13,8 @@ using BedsideRemote.Core;
 
 var checks = 0;
 void Check(bool condition, string message) { if (!condition) throw new Exception(message); checks++; }
+Check(NativeBridge.IsAuthorizedInvocation(new[] { NativeBridge.EdgeOrigin, "--parent-window=0" }) && NativeBridge.IsAuthorizedInvocation(new[] { NativeBridge.EdgeOrigin }), "Edge native startup accepts only its fixed origin and optional numeric parent handle.");
+Check(!NativeBridge.IsAuthorizedInvocation(new[] { "chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/", "--parent-window=0" }) && !NativeBridge.IsAuthorizedInvocation(new[] { NativeBridge.EdgeOrigin, "--parent-window=bad" }) && !NativeBridge.IsAuthorizedInvocation(new[] { NativeBridge.EdgeOrigin, "--parent-window=0", "extra" }), "Edge native startup rejects foreign origins, invalid parent handles and extra arguments.");
 Check(DiscoveryAddresses.Encode(new[] { "100.65.203.96", "192.168.1.28", "127.0.0.1", "8.8.8.8", "192.168.1.28", "fd12::1" }.Select(IPAddress.Parse)) == "192.168.1.28", "Discovery TXT hints contain distinct private IPv4 addresses only, excluding VPN CGNAT, public and loopback addresses.");
 var discoveryHints = DiscoveryAddresses.Encode(Enumerable.Range(1, 100).Select(index => IPAddress.Parse($"192.168.100.{index}")));
 Check(Encoding.UTF8.GetByteCount("addresses=" + discoveryHints) <= 255 && discoveryHints.Split(',').Length <= 16 && discoveryHints.Split(',').All(address => IPAddress.TryParse(address, out _)), "Discovery TXT hints are bounded without truncating an address.");
@@ -241,22 +243,25 @@ try
     {
         if (isolatedNative) throw new ArgumentException("--native-exe requires the default pipe; stop the installed agent first or omit --native-exe.");
         var executable = Path.GetFullPath(nativeExeArgument["--native-exe=".Length..]);
-        var start = new System.Diagnostics.ProcessStartInfo(executable) { RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
-        start.ArgumentList.Add(Path.Combine(root, "native-host.json")); start.ArgumentList.Add(NativeBridge.ExtensionId);
-        using var host = System.Diagnostics.Process.Start(start)!;
-        try
+        foreach (var edge in new[] { false, true })
         {
-            await SendNativeState(host.StandardInput.BaseStream, "ZZZZZZZZZZZ", false);
-            var multiple = await ReadUntil(socket, x => x.GetProperty("type").GetString() == "state" && x.GetProperty("sessions").GetArrayLength() == 2);
-            var secondSession = multiple.GetProperty("sessions").EnumerateArray().Single(x => x.GetProperty("sessionId").GetString() != multiple.GetProperty("activeSessionId").GetString()).GetProperty("sessionId").GetString()!;
-            var selectId = Guid.NewGuid().ToString(); await SendCommand(socket, selectId, 5, "browser.select", new { sessionId = secondSession });
-            var select = await ReadNative(host.StandardOutput.BaseStream);
-            Check(select.GetProperty("command").GetString() == "selectTab" && select.GetProperty("tabId").GetInt32() == 7, "Published WinExe native host forwards framed commands over stdout to the correct browser peer.");
-            await SendResult(host.StandardInput.BaseStream, select); Check((await Ack(socket, selectId)).GetProperty("ok").GetBoolean(), "Native stdio response bridges back through current-user pipe.");
-            host.StandardInput.Close(); await host.WaitForExitAsync(token);
-            Check(host.ExitCode == 0 && string.IsNullOrEmpty(await host.StandardError.ReadToEndAsync(token)), "Native host exits cleanly on browser EOF without diagnostics on the messaging stream.");
+            var start = new System.Diagnostics.ProcessStartInfo(executable) { RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+            start.ArgumentList.Add(edge ? NativeBridge.EdgeOrigin : Path.Combine(root, "native-host.json")); start.ArgumentList.Add(edge ? "--parent-window=0" : NativeBridge.ExtensionId);
+            using var host = System.Diagnostics.Process.Start(start)!;
+            try
+            {
+                await SendNativeState(host.StandardInput.BaseStream, "ZZZZZZZZZZZ", false);
+                var multiple = await ReadUntil(socket, x => x.GetProperty("type").GetString() == "state" && x.GetProperty("sessions").GetArrayLength() == 2);
+                var secondSession = multiple.GetProperty("sessions").EnumerateArray().Single(x => x.GetProperty("sessionId").GetString() != browserState.GetProperty("activeSessionId").GetString()).GetProperty("sessionId").GetString()!;
+                var selectId = Guid.NewGuid().ToString(); await SendCommand(socket, selectId, edge ? 6 : 5, "browser.select", new { sessionId = secondSession });
+                var select = await ReadNative(host.StandardOutput.BaseStream);
+                Check(select.GetProperty("command").GetString() == "selectTab" && select.GetProperty("tabId").GetInt32() == 7, "Published WinExe native host forwards framed commands over stdout to the correct browser peer.");
+                await SendResult(host.StandardInput.BaseStream, select); Check((await Ack(socket, selectId)).GetProperty("ok").GetBoolean(), "Native stdio response bridges back through current-user pipe.");
+                host.StandardInput.Close(); await host.WaitForExitAsync(token);
+                Check(host.ExitCode == 0 && string.IsNullOrEmpty(await host.StandardError.ReadToEndAsync(token)), "Native host exits cleanly on browser EOF without diagnostics on the messaging stream.");
+            }
+            finally { if (!host.HasExited) host.Kill(); }
         }
-        finally { if (!host.HasExited) host.Kill(); }
     }
     server.Revoke(deviceId);
     Check(server.Devices.Length == 0, "Device removed on revocation.");

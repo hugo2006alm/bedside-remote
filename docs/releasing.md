@@ -49,9 +49,15 @@ Windows setup accepts an existing trusted code-signing certificate and checks it
 
 Android signing and Mozilla unlisted signing are configured and verified in [v0.1.1-alpha.1](https://github.com/hugo2006alm/bedside-remote/releases/tag/v0.1.1-alpha.1). A trusted Windows publisher certificate and physical Android/browser acceptance evidence remain outstanding. Keep the release channel in alpha until these dependencies are actually resolved. Signed Android and XPI artifacts can already be used for that acceptance testing; Windows testing can use the explicitly unsigned installer.
 
-Distribution packages retain third-party notices without selecting a license for the application source. Keep the Windows runtime notice copies synchronized with the runtime packs when updating the pinned .NET SDK; Android bundles its runtime dependency and font notices in assets.
+Distribution packages include the user-approved project MIT license (copyright hugo2006alm) and separate third-party notices. Keep the Windows runtime notices synchronized with the pinned .NET SDK; Android bundles project, runtime and font notices in assets.
+
+### Free SignPath Foundation route
+
+The [Code signing policy](code-signing.md) contains the prepared application, XML templates, required roles/MFA and activation instructions. Acceptance and manual signing approval are external requirements. Run `./scripts/configure-signing.ps1 -Component SignPath -GitHubAccount hugo2006alm` only after acceptance and production-policy setup. It stores a hidden submitter token, organization/project/policy and pinned certificate, then activates SignPath. CI signs the agent before packaging and signs the installer afterwards, verifying both signatures. PR and non-release builds do not call the service; a configured signing failure blocks publication.
 
 ## Artifacts and incomplete releases
+
+The Edge companion is currently a separate unpacked development ZIP with `edge-signing.json` reporting unsigned. It is distinct from the Mozilla-signed XPI. Stable validation now includes Edge as a separate distribution gate: completing Windows signing alone cannot promote a developer-mode Edge package to stable. Normal Edge Add-ons distribution remains pending.
 
 With configured signatures, releases contain `bedside-remote-android-vX.Y.Z.apk`, `bedside-remote-windows-x64-vX.Y.Z-setup.exe` and `bedside-remote-extension-vX.Y.Z.xpi`, plus extension source, signing reports, a compatibility/validation manifest and SHA-256 checksums.
 

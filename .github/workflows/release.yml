@@ -10,6 +10,7 @@ on:
         default: false
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: release-main
   cancel-in-progress: false
@@ -48,6 +49,7 @@ jobs:
     uses: ./.github/workflows/windows-ci.yml
     with:
       version: ${{ needs.version.outputs.version }}
+      sign: ${{ needs.version.outputs.publish == 'true' }}
     secrets: inherit
   extension:
     needs: version

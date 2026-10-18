@@ -50,6 +50,7 @@ public sealed class NativeBridge
     public NativeBridge(Engine engine) : this(engine, PipeName) { }
     internal NativeBridge(Engine engine, string pipeName) { this.engine = engine; this.pipeName = pipeName; }
     public const string ExtensionId = "bedside-remote@hugo2006alm";
+    public const string EdgeOrigin = "chrome-extension://lggdbmfkngfahhnmmibhmefgfgkgngkf/";
     public static string PipeName => "BedsideRemote-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(WindowsIdentity.GetCurrent().User!.Value)))[..24];
     public async Task ListenAsync(CancellationToken cancellationToken)
     {
@@ -80,11 +81,17 @@ public sealed class NativeBridge
         catch (Exception ex) when (ex is IOException or JsonException or FormatException or InvalidOperationException or KeyNotFoundException or OperationCanceledException) { }
         finally { engine.RemoveNative(connection.Id); connection.Dispose(); connectionSlots.Release(); }
     }
-    public static bool IsNativeInvocation(string[] args) => args.Contains("--native", StringComparer.Ordinal) || (args.Length >= 2 && args[0].EndsWith(".json", StringComparison.OrdinalIgnoreCase));
+    public static bool IsNativeInvocation(string[] args) => args.Contains("--native", StringComparer.Ordinal) || (args.Length >= 2 && args[0].EndsWith(".json", StringComparison.OrdinalIgnoreCase)) || (args.Length > 0 && args[0].StartsWith("chrome-extension://", StringComparison.Ordinal));
+    internal static bool IsAuthorizedInvocation(string[] args)
+    {
+        if (args.Length == 2 && args[1] == ExtensionId && (args[0] == "--native" || Path.IsPathFullyQualified(args[0]))) return true;
+        if (args.Length is < 1 or > 2 || args[0] != EdgeOrigin) return false;
+        return args.Length == 1 || (args[1].StartsWith("--parent-window=", StringComparison.Ordinal) && ulong.TryParse(args[1].AsSpan("--parent-window=".Length), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out _));
+    }
     public static async Task<int> RunHostAsync(string[] args)
     {
         // Firefox passes the full manifest path followed by the add-on ID. --native is also supported for diagnostic launchers.
-        if (args.Length != 2 || args[1] != ExtensionId || (args[0] != "--native" && !Path.IsPathFullyQualified(args[0]))) return 2;
+        if (!IsAuthorizedInvocation(args)) return 2;
         try
         {
             using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);

@@ -8,10 +8,14 @@ async function include(directory) {
     else files[`browser-extension/${path}`] = new Uint8Array(await readFile(path));
   }
 }
-for (const directory of ['src', 'static', 'scripts', 'tests']) await include(directory);
+for (const directory of ['src', 'static', 'scripts', 'tests', 'config']) await include(directory);
 for (const path of ['package.json', 'package-lock.json', 'tsconfig.json', 'README.md']) files[`browser-extension/${path}`] = new Uint8Array(await readFile(path));
 // Keep the shared test corpus in its original relative location in the source archive.
 files['contracts/youtube-url-cases.json'] = new Uint8Array(await readFile('../contracts/youtube-url-cases.json'));
+files.LICENSE = new Uint8Array(await readFile('../LICENSE'));
+for (const path of ['windows/BedsideRemote.Agent/NativeBridge.cs', 'windows/installer/bedside-remote.iss', 'scripts/repair-browser-integration.ps1']) {
+  files[path] = new Uint8Array(await readFile(`../${path}`));
+}
 await mkdir('artifacts', { recursive: true });
 await writeFile('artifacts/bedside-remote-source.zip', zipSync(files));
 console.log('AMO reviewer source: artifacts/bedside-remote-source.zip');

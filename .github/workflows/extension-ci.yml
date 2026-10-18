@@ -39,6 +39,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run lint:extension
+      - run: npm run build:edge
       - run: npm run package
       - name: Sign or label development package
         env:
@@ -58,6 +59,8 @@ jobs:
             printf '{"component":"extension","signed":false,"reason":"Mozilla unlisted signing credentials are not configured."}\n' > ../artifacts/extension-signing.json
           fi
           cp artifacts/bedside-remote-source.zip "../artifacts/bedside-remote-extension-source-v$APP_VERSION.zip"
+          cp artifacts/bedside-remote-edge-development.zip "../artifacts/bedside-remote-edge-v$APP_VERSION-development.zip"
+          printf '{"component":"edge","signed":false,"reason":"Unpacked Edge development package; Edge Add-ons distribution is not configured."}\n' > ../artifacts/edge-signing.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-extension

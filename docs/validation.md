@@ -4,6 +4,8 @@ Automated checks, integration checks and physical validation are separate eviden
 
 ## Automated checks
 
+Current Edge/SignPath work: 17 extension checks passed locally, including the fixed Edge package identity and asynchronous callback responses; Mozilla lint remains clean. Windows passed 89 core and 54 isolated integration checks locally. New published-host checks exercise both browser invocation formats in CI. Android license packaging builds with the existing checks. Signing-provider/release checks cover missing SignPath configuration, PR/non-release isolation and the separate unsigned Edge gate. No live SignPath signature or authenticated Netflix Store playback is claimed from these results; both require external setup/testing.
+
 | Scope | Command / evidence | Result |
 | --- | --- | --- |
 | Release versioning, artifact safety and APK certificate verification | `node --test scripts/*.test.mjs` | 15 tests passed locally, including current/legacy apksigner output and rejection of unexpected signing identities. |

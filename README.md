@@ -19,7 +19,7 @@ Complementary work belongs in [the roadmap](docs/roadmap.md). See [the implement
 
 - Android 8.0/API 26 or later and a Windows 10/11 x64 desktop on the same trusted private network.
 - Firefox 142 or later, or a compatible Zen release, for the optional extension. Streaming sites still require their own valid access/subscription.
-- Netflix DRM playback in Zen on Windows is **not guaranteed**: [Zen documents its Widevine limitation](https://docs.zen-browser.app/faq#why-cant-zen-browser-play-drm-protected-content). Firefox is the first supported DRM fallback. No protection bypass is implemented.
+- Zen on Windows lacks the Widevine license needed for Netflix. The installed Netflix Store app is an Edge PWA; use the new Edge companion for this route. See [Netflix setup and validation limits](docs/netflix.md). No protection bypass is implemented.
 
 ## Install
 
@@ -68,7 +68,11 @@ npm run package
 node --test scripts/*.test.mjs
 ```
 
-See [release configuration](docs/releasing.md) for signing secrets, automatic version calculation, prerelease policy and installation artifacts. Changes to `main` run the full pipeline; eligible Conventional Commits trigger publication only after all checks succeed. No open-source project license has been selected.
+See [release configuration](docs/releasing.md) for signing secrets, automatic version calculation, prerelease policy and installation artifacts. Changes to `main` run the full pipeline; eligible Conventional Commits trigger publication only after all checks succeed.
+
+## License and code signing policy
+
+Copyright (c) 2026 **hugo2006alm**. Project source is licensed under [MIT](LICENSE); third-party components retain their own notices. See the [Code signing policy](docs/code-signing.md) for maintainer roles and the pending application for free SignPath Foundation signing. Windows signing remains inactive until the provider approves and CI verifies production signatures.
 
 ## Known limitations
 

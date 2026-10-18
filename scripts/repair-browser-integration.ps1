@@ -1,7 +1,8 @@
 #requires -Version 5.1
 [CmdletBinding()]
 param(
-    [string]$InstallDirectory = (Join-Path $env:LOCALAPPDATA 'Programs\Bedside Remote')
+    [string]$InstallDirectory = (Join-Path $env:LOCALAPPDATA 'Programs\Bedside Remote'),
+    [ValidateSet('Mozilla', 'Edge')][string]$Browser = 'Mozilla'
 )
 
 Set-StrictMode -Version Latest
@@ -10,13 +11,13 @@ if ($env:OS -ne 'Windows_NT') { throw 'Run this repair on Windows.' }
 
 $installPath = [System.IO.Path]::GetFullPath($InstallDirectory)
 $executablePath = Join-Path $installPath 'BedsideRemote.exe'
-$manifestPath = Join-Path $installPath 'native-host.json'
+$manifestPath = Join-Path $installPath $(if ($Browser -eq 'Edge') { 'native-host-edge.json' } else { 'native-host.json' })
 if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {
     throw 'The installed BedsideRemote.exe was not found. Install the Windows agent first, or specify -InstallDirectory.'
 }
 
 $hostName = 'com.bedside.remote'
-$registryPath = 'Software\Mozilla\NativeMessagingHosts\' + $hostName
+$registryPath = $(if ($Browser -eq 'Edge') { 'Software\Microsoft\Edge\NativeMessagingHosts\' } else { 'Software\Mozilla\NativeMessagingHosts\' }) + $hostName
 $registry = [Microsoft.Win32.RegistryKey]::OpenBaseKey(
     [Microsoft.Win32.RegistryHive]::CurrentUser, [Microsoft.Win32.RegistryView]::Registry64)
 try {
@@ -29,8 +30,9 @@ try {
             description = 'Bedside Remote browser bridge'
             path = $executablePath
             type = 'stdio'
-            allowed_extensions = @('bedside-remote@hugo2006alm')
         }
+        if ($Browser -eq 'Edge') { $manifest.allowed_origins = @('chrome-extension://lggdbmfkngfahhnmmibhmefgfgkgngkf/') }
+        else { $manifest.allowed_extensions = @('bedside-remote@hugo2006alm') }
         [System.IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Compress),
             [System.Text.UTF8Encoding]::new($false))
         $key.SetValue('', $manifestPath, [Microsoft.Win32.RegistryValueKind]::String)

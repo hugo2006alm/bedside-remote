@@ -42,6 +42,14 @@ android {
 
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 
+val copyProjectLicense by tasks.registering(Copy::class) {
+    from(rootProject.file("../LICENSE"))
+    into(layout.buildDirectory.dir("generated/projectLicense/licenses"))
+    rename { "BedsideRemote-MIT.txt" }
+}
+android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/projectLicense"))
+tasks.named("preBuild").configure { dependsOn(copyProjectLicense) }
+
 spotless { kotlin { target("src/**/*.kt"); ktfmt("0.54").kotlinlangStyle() } }
 
 dependencies {

@@ -71,7 +71,7 @@ jobs:
           from zipfile import ZipFile
           apks = list(Path("../artifacts").glob("*.apk"))
           assert len(apks) == 1, "Expected one Android artifact"
-          notices = ["Apache-2.0.txt", "MPL-2.0.txt", "OkHttp-Public-Suffix-NOTICE.txt", "THIRD-PARTY-NOTICE.txt", "DM-Sans-OFL.txt", "Manrope-OFL.txt"]
+          notices = ["BedsideRemote-MIT.txt", "Apache-2.0.txt", "MPL-2.0.txt", "OkHttp-Public-Suffix-NOTICE.txt", "THIRD-PARTY-NOTICE.txt", "DM-Sans-OFL.txt", "Manrope-OFL.txt"]
           with ZipFile(apks[0]) as apk:
               for notice in notices:
                   assert apk.getinfo("assets/licenses/" + notice).file_size > 0, notice

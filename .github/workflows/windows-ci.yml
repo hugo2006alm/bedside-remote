@@ -6,17 +6,25 @@ on:
       version:
         type: string
         default: 0.1.0-alpha.1
+      sign:
+        type: boolean
+        default: false
     secrets:
       WINDOWS_SIGNING_PFX_BASE64:
         required: false
       WINDOWS_SIGNING_PASSWORD:
         required: false
+      SIGNPATH_API_TOKEN:
+        required: false
 permissions:
   contents: read
+  actions: read
 jobs:
   windows:
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: ${{ inputs.sign && vars.WINDOWS_SIGNING_PROVIDER == 'signpath' && 150 || 25 }}
+    env:
+      APP_VERSION: ${{ inputs.version || '0.1.0-alpha.1' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -49,12 +57,22 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           dotnet run --project windows/BedsideRemote.IntegrationTests -c Release --no-build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Publish and package Windows x64
+      - name: Select signing provider
+        id: signing
         shell: pwsh
         env:
-          APP_VERSION: ${{ inputs.version || '0.1.0-alpha.1' }}
+          SIGN_RELEASE: ${{ inputs.sign && github.event_name != 'pull_request' }}
+          WINDOWS_SIGNING_PROVIDER: ${{ vars.WINDOWS_SIGNING_PROVIDER }}
           PFX_BASE64: ${{ github.event_name != 'pull_request' && secrets.WINDOWS_SIGNING_PFX_BASE64 || '' }}
           PFX_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.WINDOWS_SIGNING_PASSWORD || '' }}
+          SIGNPATH_API_TOKEN: ${{ github.event_name != 'pull_request' && secrets.SIGNPATH_API_TOKEN || '' }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          SIGNPATH_CERTIFICATE_THUMBPRINT: ${{ vars.SIGNPATH_CERTIFICATE_THUMBPRINT }}
+        run: node scripts/windows-signing.mjs
+      - name: Publish Windows x64 and verify native hosts
+        shell: pwsh
         run: |
           $publishDir = Join-Path $env:RUNNER_TEMP 'windows-publish'
           $outputDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts'
@@ -65,16 +83,26 @@ jobs:
           $preview = Join-Path $env:RUNNER_TEMP 'windows-preview.png'
           dotnet run --project windows/BedsideRemote.IntegrationTests -c Release --no-build -- "--native-exe=$publishedExe" "--preview=$preview"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $signed = $false
-          if ($env:PFX_BASE64 -and $env:GITHUB_EVENT_NAME -ne 'pull_request') {
-            $pfxPath = Join-Path $env:RUNNER_TEMP 'windows-signing.pfx'
-            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:PFX_BASE64))
-            $securePassword = ConvertTo-SecureString $env:PFX_PASSWORD -AsPlainText -Force
-            $cert = Get-PfxCertificate -FilePath $pfxPath -Password $securePassword
-            $signature = Set-AuthenticodeSignature -FilePath (Join-Path $publishDir 'BedsideRemote.exe') -Certificate $cert -TimestampServer 'http://timestamp.digicert.com' -HashAlgorithm SHA256
-            if ($signature.Status -ne 'Valid') { throw "Windows executable signing failed: $($signature.Status)" }
-            $signed = $true
-          }
+      - name: Sign the agent before packaging
+        id: agent-signature
+        uses: ./.github/actions/sign-windows
+        with:
+          file: ${{ runner.temp }}/windows-publish/BedsideRemote.exe
+          provider: ${{ steps.signing.outputs.provider }}
+          artifact-name: unsigned-windows-agent
+          artifact-configuration: windows-agent
+          api-token: ${{ github.event_name != 'pull_request' && secrets.SIGNPATH_API_TOKEN || '' }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          certificate-thumbprint: ${{ vars.SIGNPATH_CERTIFICATE_THUMBPRINT }}
+          pfx-base64: ${{ github.event_name != 'pull_request' && secrets.WINDOWS_SIGNING_PFX_BASE64 || '' }}
+          pfx-password: ${{ github.event_name != 'pull_request' && secrets.WINDOWS_SIGNING_PASSWORD || '' }}
+      - name: Build installer containing the signed agent
+        shell: pwsh
+        run: |
+          $publishDir = Join-Path $env:RUNNER_TEMP 'windows-publish'
+          $outputDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts'
           $iscc = $env:ISCC_PATH
           if (-not (Test-Path -LiteralPath $iscc)) { throw 'The verified Inno Setup compiler is missing.' }
           & $iscc "/DAppVersion=$env:APP_VERSION" "/DPublishDir=$publishDir" "/DOutputDir=$outputDir" windows/installer/bedside-remote.iss
@@ -84,15 +112,37 @@ jobs:
           $installer = $installers[0].FullName
           $expected = Join-Path $outputDir "bedside-remote-windows-x64-v$env:APP_VERSION-setup.exe"
           if ($installer -ne $expected) { Move-Item -LiteralPath $installer -Destination $expected }
-          if ($signed) {
-            $signature = Set-AuthenticodeSignature -FilePath $expected -Certificate $cert -TimestampServer 'http://timestamp.digicert.com' -HashAlgorithm SHA256
-            if ($signature.Status -ne 'Valid') { throw 'Installer signing failed.' }
-          }
+      - name: Sign the installer
+        id: installer-signature
+        uses: ./.github/actions/sign-windows
+        with:
+          file: ${{ github.workspace }}/artifacts/bedside-remote-windows-x64-v${{ env.APP_VERSION }}-setup.exe
+          provider: ${{ steps.signing.outputs.provider }}
+          artifact-name: unsigned-windows-installer
+          artifact-configuration: windows-installer
+          api-token: ${{ github.event_name != 'pull_request' && secrets.SIGNPATH_API_TOKEN || '' }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          certificate-thumbprint: ${{ vars.SIGNPATH_CERTIFICATE_THUMBPRINT }}
+          pfx-base64: ${{ github.event_name != 'pull_request' && secrets.WINDOWS_SIGNING_PFX_BASE64 || '' }}
+          pfx-password: ${{ github.event_name != 'pull_request' && secrets.WINDOWS_SIGNING_PASSWORD || '' }}
+      - name: Verify installation and signing report
+        shell: pwsh
+        env:
+          PROVIDER: ${{ steps.signing.outputs.provider }}
+          AGENT_THUMBPRINT: ${{ steps.agent-signature.outputs.thumbprint }}
+          INSTALLER_THUMBPRINT: ${{ steps.installer-signature.outputs.thumbprint }}
+        run: |
+          $expected = Join-Path $env:GITHUB_WORKSPACE "artifacts/bedside-remote-windows-x64-v$env:APP_VERSION-setup.exe"
           $installDir = [IO.Path]::GetFullPath((Join-Path $env:RUNNER_TEMP 'BedsideRemote-install-smoke-João-語'))
           $tempRoot = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
           if (-not $installDir.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Installer smoke target must stay inside RUNNER_TEMP.' }
-          & ./windows/installer/smoke-test.ps1 -Installer $expected -InstallDirectory $installDir
-          @{ component = 'windows'; signed = $signed; reason = $(if ($signed) { '' } else { 'Authenticode certificate is not configured.' }) } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $outputDir 'windows-signing.json') -Encoding utf8
+          $agentHash = (Get-FileHash (Join-Path $env:RUNNER_TEMP 'windows-publish/BedsideRemote.exe')).Hash
+          & ./windows/installer/smoke-test.ps1 -Installer $expected -InstallDirectory $installDir -ExpectedExecutableSha256 $agentHash
+          $signed = $env:PROVIDER -ne 'none'
+          if ($signed -and (!$env:AGENT_THUMBPRINT -or $env:AGENT_THUMBPRINT -ne $env:INSTALLER_THUMBPRINT)) { throw 'Agent and installer publisher identities differ.' }
+          @{ component = 'windows'; signed = $signed; provider = $env:PROVIDER; certificateThumbprint = $env:AGENT_THUMBPRINT; reason = $(if ($signed) { '' } else { 'Trusted Windows signing is not configured.' }) } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'artifacts/windows-signing.json') -Encoding utf8
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-windows
@@ -106,9 +156,3 @@ jobs:
           path: ${{ runner.temp }}/windows-preview.png
           if-no-files-found: error
           retention-days: 7
-      - name: Remove temporary certificate
-        if: always()
-        shell: pwsh
-        run: |
-          $path = Join-Path $env:RUNNER_TEMP 'windows-signing.pfx'
-          if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path }

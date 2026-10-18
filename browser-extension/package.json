@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:edge": "node scripts/build.mjs --edge",
     "check": "tsc --noEmit && node scripts/lint.mjs",
     "test": "tsx --test tests/*.test.ts",
     "lint:extension": "web-ext lint --source-dir dist --warnings-as-errors",

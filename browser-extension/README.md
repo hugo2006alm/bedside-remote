@@ -21,6 +21,8 @@ npm run package
 
 ## Install and connect
 
+For the Netflix Store app, use the separate Edge package and [PWA setup instructions](../docs/netflix.md). `npm run build:edge` produces `dist-edge/` and `artifacts/bedside-remote-edge-development.zip`, with a fixed public-key ID, MV3 service worker and asynchronous response bridging. It adds no dependencies. Unpacked installation requires Edge Developer mode and is not signed Edge Add-ons distribution. Install the matching Windows agent for its separate exact-origin native registration. Real Netflix playback remains pending until tested in the user's session.
+
 1. Build, open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select `dist/manifest.json`. Development installs are temporary and must be reloaded after restarting Firefox. Reload already open player pages after first installation.
 2. Install/start the Windows agent and register its current-user Native Messaging host, `com.bedside.remote`, with the allowed extension ID `bedside-remote@hugo2006alm`.
 3. Approve site access when Firefox requests it. Open a YouTube/Netflix video and use the popup to select the remote target and inspect native connection/player status. The Windows agent selects corresponding sessions for the phone.

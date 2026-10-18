@@ -1,4 +1,5 @@
 import { NativeLink } from './native';
+import { listen } from './messages';
 import { isPlayerState, object, onlyKeys, parseNativeCommand, platformForUrl, type NativeCommand, type Playback, type Result } from './protocol';
 
 interface TabState { instance: string; state: Playback }
@@ -105,7 +106,7 @@ async function receiveNative(value: unknown) {
   native.send({ version: 1, type: 'browser.result', id: command.id, ...result });
 }
 
-browser.runtime.onMessage.addListener((message: unknown, sender) => {
+listen((message: unknown, sender) => {
   if (!object(message)) return undefined;
   if (sender.id !== browser.runtime.id) return undefined;
   if (message.type === 'player.state' && sender.tab?.id !== undefined && sender.frameId === 0) {

@@ -1,4 +1,5 @@
 import { NetflixAdapter } from './adapters/netflix';
+import { listen } from './messages';
 import { YoutubeAdapter } from './adapters/youtube';
 import { object, onlyKeys, parseNativeCommand, platformForUrl } from './protocol';
 
@@ -44,7 +45,7 @@ if (adapter) {
     try { await browser.runtime.sendMessage({ type: 'player.state', instance, state }); }
     catch { /* Extension reload or sleeping background: next poll retries. */ lastState = ''; }
   }
-  browser.runtime.onMessage.addListener((message: unknown) => {
+  listen((message: unknown) => {
     if (object(message) && message.type === 'player.snapshot' && onlyKeys(message, ['type'])) {
       return publish(true).then(() => ({ ok: true }));
     }

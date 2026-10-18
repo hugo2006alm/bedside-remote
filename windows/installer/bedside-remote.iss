@@ -11,7 +11,7 @@
 AppId={{6036D5F6-3B81-41FC-9943-C6E98D1855D8}
 AppName=Bedside Remote
 AppVersion={#AppVersion}
-AppPublisher=Bedside Remote
+AppPublisher=hugo2006alm
 AppPublisherURL=https://github.com/hugo2006alm/bedside-remote
 DefaultDirName={localappdata}\Programs\Bedside Remote
 DefaultGroupName=Bedside Remote
@@ -32,10 +32,12 @@ Name: "{group}\Bedside Remote"; Filename: "{app}\BedsideRemote.exe"
 Name: "{group}\Uninstall Bedside Remote"; Filename: "{uninstallexe}"
 [Registry]
 Root: HKCU; Subkey: "Software\Mozilla\NativeMessagingHosts\com.bedside.remote"; ValueType: string; ValueData: "{app}\native-host.json"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Microsoft\Edge\NativeMessagingHosts\com.bedside.remote"; ValueType: string; ValueData: "{app}\native-host-edge.json"; Flags: uninsdeletekey
 [Run]
 Filename: "{app}\BedsideRemote.exe"; Description: "Open Bedside Remote"; Flags: nowait postinstall skipifsilent
 [UninstallDelete]
 Type: files; Name: "{app}\native-host.json"
+Type: files; Name: "{app}\native-host-edge.json"
 [Code]
 function JsonPath(Value: String): String;
 begin
@@ -54,6 +56,9 @@ begin
     Lines[0] := Manifest;
     if not SaveStringsToUTF8FileWithoutBOM(ExpandConstant('{app}\native-host.json'), Lines, False) then
       RaiseException('Could not register the browser integration manifest.');
+    Lines[0] := '{"name":"com.bedside.remote","description":"Bedside Remote Edge bridge","path":"' + JsonPath(ExpandConstant('{app}\BedsideRemote.exe')) + '","type":"stdio","allowed_origins":["chrome-extension://lggdbmfkngfahhnmmibhmefgfgkgngkf/"]}';
+    if not SaveStringsToUTF8FileWithoutBOM(ExpandConstant('{app}\native-host-edge.json'), Lines, False) then
+      RaiseException('Could not register the Edge integration manifest.');
   end;
 end;
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);

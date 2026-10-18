@@ -1,0 +1,105 @@
+name: Sign and verify a Windows binary
+description: Optional PFX or SignPath signing with a verified publisher and timestamp.
+inputs:
+  file:
+    required: true
+    description: Absolute path of the binary built in this job.
+  provider:
+    required: true
+    description: Validated provider (none, pfx or signpath).
+  artifact-name:
+    required: true
+    description: Unique unsigned artifact name.
+  artifact-configuration:
+    required: true
+    description: Approved SignPath artifact configuration slug.
+  api-token:
+    required: false
+    description: SignPath submitter token.
+  organization-id:
+    required: false
+    description: Approved SignPath organization.
+  project-slug:
+    required: false
+    description: Approved SignPath project.
+  signing-policy-slug:
+    required: false
+    description: Production signing policy requiring manual approval.
+  certificate-thumbprint:
+    required: false
+    description: Expected production certificate thumbprint.
+  pfx-base64:
+    required: false
+    description: Optional legacy PFX credential.
+  pfx-password:
+    required: false
+    description: Optional legacy PFX password.
+outputs:
+  thumbprint:
+    description: Verified certificate thumbprint, empty for unsigned builds.
+    value: ${{ steps.verify.outputs.thumbprint }}
+runs:
+  using: composite
+  steps:
+    - id: metadata
+      shell: pwsh
+      env:
+        BINARY: ${{ inputs.file }}
+      run: |
+        $version = (Get-Item -LiteralPath $env:BINARY).VersionInfo.ProductVersion.Trim()
+        "version=$version" >> $env:GITHUB_OUTPUT
+    - if: inputs.provider == 'pfx'
+      id: pfx
+      shell: pwsh
+      env:
+        BINARY: ${{ inputs.file }}
+        PFX_BASE64: ${{ inputs.pfx-base64 }}
+        PFX_PASSWORD: ${{ inputs.pfx-password }}
+      run: |
+        $path = Join-Path $env:RUNNER_TEMP ('signing-' + [Guid]::NewGuid().ToString('N') + '.pfx')
+        try {
+          [IO.File]::WriteAllBytes($path, [Convert]::FromBase64String($env:PFX_BASE64))
+          $cert = Get-PfxCertificate -FilePath $path -Password (ConvertTo-SecureString $env:PFX_PASSWORD -AsPlainText -Force)
+          $result = Set-AuthenticodeSignature -FilePath $env:BINARY -Certificate $cert -TimestampServer 'http://timestamp.digicert.com' -HashAlgorithm SHA256
+          if ($result.Status -ne 'Valid') { throw 'PFX signing failed.' }
+          "thumbprint=$($cert.Thumbprint)" >> $env:GITHUB_OUTPUT
+        } finally { if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path } }
+    - if: inputs.provider == 'signpath'
+      id: upload
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.file }}
+        if-no-files-found: error
+        retention-days: 1
+    - if: inputs.provider == 'signpath'
+      uses: SignPath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3
+      with:
+        api-token: ${{ inputs.api-token }}
+        organization-id: ${{ inputs.organization-id }}
+        project-slug: ${{ inputs.project-slug }}
+        signing-policy-slug: ${{ inputs.signing-policy-slug }}
+        artifact-configuration-slug: ${{ inputs.artifact-configuration }}
+        github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
+        wait-for-completion: true
+        wait-for-completion-timeout-in-seconds: 3600
+        output-artifact-directory: ${{ runner.temp }}/signed-${{ inputs.artifact-name }}
+        parameters: |
+          version: "${{ steps.metadata.outputs.version }}"
+    - id: verify
+      shell: pwsh
+      env:
+        BINARY: ${{ inputs.file }}
+        PROVIDER: ${{ inputs.provider }}
+        DOWNLOAD_DIRECTORY: ${{ runner.temp }}/signed-${{ inputs.artifact-name }}
+        EXPECTED_THUMBPRINT: ${{ inputs.provider == 'pfx' && steps.pfx.outputs.thumbprint || inputs.certificate-thumbprint }}
+      run: |
+        if ($env:PROVIDER -eq 'none') { exit 0 }
+        if ($env:PROVIDER -eq 'signpath') {
+          $files = @(Get-ChildItem -LiteralPath $env:DOWNLOAD_DIRECTORY -File -Recurse)
+          if ($files.Count -ne 1 -or $files[0].Name -ne [IO.Path]::GetFileName($env:BINARY)) { throw 'Unexpected signed artifact contents.' }
+          Copy-Item -LiteralPath $files[0].FullName -Destination $env:BINARY -Force
+        }
+        $signature = Get-AuthenticodeSignature -LiteralPath $env:BINARY
+        if ($signature.Status -ne 'Valid' -or !$signature.TimeStamperCertificate -or $signature.SignerCertificate.Thumbprint -ne $env:EXPECTED_THUMBPRINT) { throw 'Signed binary has an invalid chain, timestamp or publisher identity.' }
+        "thumbprint=$($signature.SignerCertificate.Thumbprint)" >> $env:GITHUB_OUTPUT

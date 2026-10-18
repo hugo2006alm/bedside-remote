@@ -2,7 +2,7 @@
 
 ## Product and architecture
 
-Build a native Android remote for Windows, with universal controls and dedicated YouTube/Netflix integrations in Zen/Firefox. Android uses Kotlin/Compose; the interactive Windows agent uses C#/.NET; the optional extension uses TypeScript/WebExtensions. Consult [the implementation plan](docs/implementation-plan.md), [architecture](docs/architecture.md), [security](docs/security.md) and [protocol v1](contracts/protocol.md). All repository content must be in English.
+Build a native Android remote for Windows, with universal controls and YouTube/Netflix integrations in Zen/Firefox plus the user-approved Edge companion for Netflix's Store PWA. Android uses Kotlin/Compose; the interactive Windows agent uses C#/.NET; the optional extension uses TypeScript/WebExtensions. Consult [the implementation plan](docs/implementation-plan.md), [architecture](docs/architecture.md), [security](docs/security.md) and [protocol v1](contracts/protocol.md). All repository content must be in English.
 
 ## Scope and roadmap
 
@@ -18,6 +18,7 @@ Build a native Android remote for Windows, with universal controls and dedicated
 - Follow the versioned contract across all components. Reject unknown actions and invalid payloads. Isolate streaming adapters and expose only currently available capabilities.
 - Require encrypted authenticated LAN transport, explicit Windows pairing approval, secure credential storage and revocation. No arbitrary remote shell, streaming credentials, private catalog APIs or DRM bypass.
 - Prefer platform APIs and minimal justified dependencies. Do not add an open-source project license without user authorization.
+- The user approved MIT with copyright `hugo2006alm`; preserve the root LICENSE and include it in distributions. Do not relicense without authorization.
 - Run relevant builds, lint and tests; distinguish automated tests, integration tests, physical-device tests and pending validation. Never infer real streaming compatibility from fixtures.
 - Keep CI and automatic releases working. Tags and releases must be created in the same supported flow; never rely on a GITHUB_TOKEN-created tag triggering another push workflow. Label missing signing or physical validation honestly.
 - Keep README build commands and installation instructions synchronized with the implementation. See component READMEs for exact commands.

@@ -1,6 +1,6 @@
 # Third-party notices
 
-These notices apply only to the named third-party components distributed with the Windows agent. They do not grant a license to Bedside Remote's own source code. No project-wide license has been selected.
+These notices apply only to the named third-party components distributed with the Windows agent. The project source is covered separately by the root MIT LICENSE, copyright (c) 2026 hugo2006alm.
 
 | Directory | Component and source |
 | --- | --- |

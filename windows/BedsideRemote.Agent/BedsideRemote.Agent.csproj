@@ -4,12 +4,14 @@
     <UseWPF>true</UseWPF><UseWindowsForms>true</UseWindowsForms>
     <EnableWindowsTargeting>true</EnableWindowsTargeting><ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>BedsideRemote</AssemblyName>
+    <Product>Bedside Remote</Product><Company>hugo2006alm</Company><Copyright>Copyright (c) 2026 hugo2006alm</Copyright>
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../BedsideRemote.Core/BedsideRemote.Core.csproj" />
     <PackageReference Include="Haukcode.Mdns" Version="1.0.21" />
     <None Include="../licenses/**/*" Link="licenses/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../../LICENSE" Link="LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <InternalsVisibleTo Include="BedsideRemote.IntegrationTests" />
   </ItemGroup>
 </Project>

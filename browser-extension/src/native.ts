@@ -24,7 +24,7 @@ export class NativeLink {
       port.onDisconnect.addListener(() => {
         if (this.port !== port) return;
         this.port = null;
-        this.lastError = failureMessage(port.error, 'Windows agent disconnected or Native Messaging host is not registered.');
+        this.lastError = failureMessage(port.error ?? browser.runtime.lastError, 'Windows agent disconnected or Native Messaging host is not registered.');
         this.changed();
         this.retry = setTimeout(() => this.connect(), reconnectDelay(this.attempts++));
       });

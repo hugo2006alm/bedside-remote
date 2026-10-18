@@ -9,7 +9,7 @@ export function validateRelease(directory, version, physicallyValidated) {
   const parsed = parseVersion(version);
   if (!parsed || version.startsWith('v')) throw new Error('Invalid application version');
   const signing = {};
-  for (const component of ['android', 'windows', 'extension']) {
+  for (const component of ['android', 'windows', 'extension', 'edge']) {
     const report = JSON.parse(readFileSync(join(directory, `${component}-signing.json`), 'utf8').replace(/^\uFEFF/, ''));
     if (report.component !== component || typeof report.signed !== 'boolean') throw new Error(`Invalid signing report: ${component}`);
     signing[component] = report;
@@ -19,6 +19,7 @@ export function validateRelease(directory, version, physicallyValidated) {
     `bedside-remote-windows-x64-v${version}-setup.exe`,
     `bedside-remote-extension-v${version}${signing.extension.signed ? '.xpi' : '-development.zip'}`,
     `bedside-remote-extension-source-v${version}.zip`,
+    `bedside-remote-edge-v${version}${signing.edge.signed ? '.crx' : '-development.zip'}`,
   ];
   for (const file of expected) {
     if (!statSync(join(directory, file), { throwIfNoEntry: false })?.size) throw new Error(`Missing or empty artifact: ${file}`);

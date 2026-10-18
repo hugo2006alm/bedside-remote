@@ -7,7 +7,7 @@ Practical reference for work outside the MVP. Listing an item is not evidence of
 - **Universal remote:** media/volume, D-pad/navigation, trackpad gestures and Android keyboard with Unicode.
 - **Connection/security:** discovery and manual connection, explicit pairing approval, encryption/authentication, reconnect, device management and revocation.
 - **YouTube in Zen/Firefox:** Android sharing, remote playback, synchronized editable queue, automatic advance when permitted, metadata and contextual controls.
-- **Netflix:** contextual player/progress, episode/intro/recap controls when available; stable audio/subtitle access if viable; universal fallback. Real Zen playback/DRM compatibility requires separate validation.
+- **Netflix:** contextual player/progress, episode/intro/recap controls when available; stable audio/subtitle access if viable; universal fallback. The user approved an Edge companion for the Store PWA because Zen on Windows cannot provide its DRM playback. Live Store-app compatibility remains a validation requirement.
 - **Quality/distribution:** accessible polished native UI and motion, reduced motion, Windows tray agent, optional extension, tests, CI, installers, automatic releases and concise documentation. Signing credentials and physical validation are release dependencies, not future features.
 
 Required sensitivity adjustments and basic interaction feedback do not depend on advanced customization.
@@ -28,7 +28,7 @@ For these items, “planned” refers to investigation, not a delivery commitmen
 | --- | --- | --- | --- | --- |
 | Native YouTube search using an official solution. | P1 | Evaluate YouTube Data API credentials, quotas, policies and maintenance. Must not delay required sharing/queue flows. | If approved: search and play now/next/add to queue; handle errors and quota limits. | Planned |
 | QR-assisted pairing to avoid manually entering the full certificate fingerprint. | P2 | Evaluate a native scanning flow, camera permissions and trusted transfer of the endpoint/fingerprint. Temporary-code pairing remains the MVP flow. | If approved: fill connection details from a Windows-displayed QR code; retain identity verification, expiry and explicit local approval. | Planned |
-| Chrome/Edge extension, including possible Netflix fallback in Edge. | P2 | WebExtensions/Native Messaging compatibility, distribution and real DRM/playback tests; preserve Zen/Firefox quality. | Define after compatibility investigation. | Planned |
+| Chrome distribution of the browser companion. | P2 | Reuse the Edge-compatible package; decide store identity/distribution and validate in real Chrome. Edge support for the Netflix Store PWA is now approved MVP work. | Define after distribution and compatibility investigation. | Planned |
 | Silent automatic updates. | P3 | Reliable signing/distribution, protocol compatibility and preserved pairings/settings. | Define after investigation. Checking the latest version and opening its release is sufficient for MVP. | Planned |
 | Portable Windows distribution. | P3 | Concrete benefit over installer; Native Messaging registration and persisted data without installation. | Define after evaluating setup, updates and removal. | Planned |
 | Optional clipboard-assisted insertion for long text. | P3 | Investigate explicit opt-in, clipboard formats/history, restoration races and target-app compatibility; retain current keyboard input. | Define after feasibility/privacy review; no clipboard contents may be transmitted back to Android. | Planned |

@@ -8,12 +8,13 @@ import { validateRelease, writeChecksums } from './prepare-release.mjs';
 
 function fixture(version, signed = false) {
   const directory = mkdtempSync(join(tmpdir(), 'bedside-release-'));
-  for (const component of ['android', 'windows', 'extension']) writeFileSync(join(directory, `${component}-signing.json`), JSON.stringify({ component, signed }));
+  for (const component of ['android', 'windows', 'extension', 'edge']) writeFileSync(join(directory, `${component}-signing.json`), JSON.stringify({ component, signed }));
   for (const file of [
     `bedside-remote-android-v${version}${signed ? '' : '-development'}.apk`,
     `bedside-remote-windows-x64-v${version}-setup.exe`,
     `bedside-remote-extension-v${version}${signed ? '.xpi' : '-development.zip'}`,
     `bedside-remote-extension-source-v${version}.zip`,
+    `bedside-remote-edge-v${version}${signed ? '.crx' : '-development.zip'}`,
   ]) writeFileSync(join(directory, file), 'nonempty test artifact');
   return directory;
 }
@@ -47,5 +48,14 @@ test('checksums include manifest and are reproducible', () => {
     assert.equal(output, `${createHash('sha256').update('payload').digest('hex')}  payload.apk\n`);
     writeChecksums(dir);
     assert.equal(readFileSync(join(dir, 'SHA256SUMS.txt'), 'utf8'), output);
+  } finally { rmSync(dir, { recursive: true }); }
+});
+
+test('unpacked Edge distribution cannot be hidden behind successful Mozilla signing', () => {
+  const dir = fixture('1.0.0', true);
+  try {
+    writeFileSync(join(dir, 'edge-signing.json'), JSON.stringify({ component: 'edge', signed: false }));
+    writeFileSync(join(dir, 'bedside-remote-edge-v1.0.0-development.zip'), 'fixture');
+    assert.throws(() => validateRelease(dir, '1.0.0', true), /Stable release/);
   } finally { rmSync(dir, { recursive: true }); }
 });
