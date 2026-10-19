@@ -4,12 +4,15 @@ const detail = document.querySelector<HTMLElement>('#detail')!;
 const target = document.querySelector<HTMLSelectElement>('#target')!;
 const player = document.querySelector<HTMLElement>('#player')!;
 const reconnect = document.querySelector<HTMLButtonElement>('#reconnect')!;
-interface Status { connected: boolean; error: string; activeTabId?: number; tabs: Playback[] }
+interface Status { connected: boolean; connecting: boolean; error: string; activeTabId?: number; tabs: Playback[] }
 async function refresh() {
   try {
     const status: Status = await browser.runtime.sendMessage({ type: 'popup.status' });
-    connection.textContent = status.connected ? 'Windows agent connected' : 'Windows agent unavailable';
-    detail.textContent = status.error || 'Control is available from your paired Android phone.';
+    connection.dataset.state = status.connected ? 'connected' : status.connecting ? 'connecting' : 'unavailable';
+    connection.textContent = status.connected ? 'Windows agent connected' : status.connecting ? 'Connecting to Windows agent…' : 'Windows agent unavailable';
+    detail.textContent = status.connected ? 'Control is available from your paired Android phone.'
+      : status.connecting ? 'Waiting for Windows to confirm the connection.'
+      : status.error || 'Start Bedside Remote on Windows, then retry.';
     const selection = String(status.activeTabId ?? '');
     const options = status.tabs.map(tab => {
       const option = document.createElement('option');

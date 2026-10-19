@@ -14,6 +14,10 @@ The installed Netflix package `4DF9E0F8.Netflix` version 7.0.8.0 declares `Micro
 
 The Edge MV3 service worker shares the public-DOM/HTML-media adapter and uses callback responses for asynchronous messages. The host accepts only the fixed Edge origin and an optional numeric parent handle. Unpacked installation is developer loading, not signed Edge Add-ons distribution.
 
+## Confirmed connection repair
+
+On 2026-10-19 the user initially saw a brief connected indication followed by `Specified native messaging host not found`. Registration checks and rewrites in the tooling context did not establish a lasting browser connection. Running `scripts/repair-browser-integration.ps1 -Browser Edge` from the user's ordinary, non-administrator PowerShell restored the connection, as confirmed by the user. Process inspection also found the installed native executable launched with the exact allowed Edge origin. The reason the execution contexts observed different behavior remains unisolated. This confirms the browser-to-Windows connection, not Netflix playback or remote controls.
+
 ## Validation limits
 
 Fixtures cover available controls and observable state changes. Packaging checks verify identity/permissions; native integration tests cover exact-origin admission and framed stdio. Real Store-app playback, profile/extension loading, metadata, play/pause/seek, intro/recap/episode controls and audio/subtitle access still require the user's session. Builds do not establish DRM, account or autoplay compatibility. Universal controls remain available. Never bypass protections or enable debugging in the user's authenticated profile.

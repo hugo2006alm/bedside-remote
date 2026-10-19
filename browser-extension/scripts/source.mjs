@@ -16,6 +16,10 @@ files.LICENSE = new Uint8Array(await readFile('../LICENSE'));
 for (const path of ['windows/BedsideRemote.Agent/NativeBridge.cs', 'windows/installer/bedside-remote.iss', 'scripts/repair-browser-integration.ps1']) {
   files[path] = new Uint8Array(await readFile(`../${path}`));
 }
+for (const path of ['android/app/src/main/res/font/dm_sans.ttf', 'android/app/src/main/res/font/manrope.ttf',
+  'android/app/src/main/assets/licenses/DM-Sans-OFL.txt', 'android/app/src/main/assets/licenses/Manrope-OFL.txt']) {
+  files[path] = new Uint8Array(await readFile(`../${path}`));
+}
 await mkdir('artifacts', { recursive: true });
 await writeFile('artifacts/bedside-remote-source.zip', zipSync(files));
 console.log('AMO reviewer source: artifacts/bedside-remote-source.zip');

@@ -98,6 +98,7 @@ public sealed class NativeBridge
             await pipe.ConnectAsync(5000);
             using var cancellation = new CancellationTokenSource();
             var input = Console.OpenStandardInput(); var output = Console.OpenStandardOutput();
+            await NativeFrames.WriteAsync(output, JsonSerializer.SerializeToUtf8Bytes(new { version = 1, type = "native.ready" }, Protocol.Json), cancellation.Token);
             var toAgent = Pump(input, pipe, cancellation.Token); var toBrowser = Pump(pipe, output, cancellation.Token);
             await Task.WhenAny(toAgent, toBrowser);
             cancellation.Cancel();

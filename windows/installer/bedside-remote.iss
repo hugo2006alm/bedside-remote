@@ -23,6 +23,7 @@ OutputBaseFilename=bedside-remote-windows-x64-v{#AppVersion}-setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=..\BedsideRemote.Agent\Assets\AppIcon.ico
 CloseApplications=yes
 UninstallDisplayIcon={app}\BedsideRemote.exe
 [Files]

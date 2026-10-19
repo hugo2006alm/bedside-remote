@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -38,6 +39,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -159,6 +161,17 @@ fun RemoteContent(
                     .padding(start = 24.dp, end = 12.dp, top = 12.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                Image(
+                    painterResource(R.drawable.ic_brand_foreground),
+                    contentDescription = null,
+                    modifier =
+                        Modifier.padding(end = 12.dp)
+                            .size(40.dp)
+                            .background(
+                                androidx.compose.ui.graphics.Color(0xFF101113),
+                                RoundedCornerShape(12.dp),
+                            ),
+                )
                 Column(Modifier.weight(1f)) {
                     Text(
                         "BEDSIDE / REMOTE",
