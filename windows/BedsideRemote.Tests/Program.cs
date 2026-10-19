@@ -25,11 +25,15 @@ foreach (var address in new[] { "192.168.1.7", "10.0.0.2", "172.16.0.1", "172.31
 foreach (var address in new[] { "8.8.8.8", "172.15.0.1", "172.32.0.1", "0.0.0.0", "100.64.1.1", "2001:4860:4860::8888", "169.254.1.1" }) Check(!Protocol.IsLan(IPAddress.Parse(address)), "Public/unapproved address must be rejected");
 var valid = new Dictionary<string, string>
 {
+    ["browser.navigate"] = "{\"key\":\"right\"}",
     ["input.key"] = "{\"key\":\"home\"}",
     ["input.text"] = "{\"text\":\"Olá 🌙\"}",
     ["input.pointer"] = "{\"dx\":-1000,\"dy\":1000}",
     ["input.click"] = "{\"button\":\"right\"}",
     ["input.scroll"] = "{\"delta\":-1200}",
+    ["input.navigate"] = "{\"key\":\"right\"}",
+    ["input.drag"] = "{\"phase\":\"move\",\"dx\":10,\"dy\":-5}",
+    ["app.launch"] = "{\"appId\":\"youtube\"}",
     ["media.command"] = "{\"command\":\"mute\"}",
     ["browser.command"] = "{\"command\":\"seek\",\"position\":1.25}",
     ["browser.select"] = "{\"sessionId\":\"test:1\"}",
@@ -41,6 +45,12 @@ var valid = new Dictionary<string, string>
     ["queue.previous"] = "{}"
 };
 foreach (var item in valid) Check(Parse(item.Key, item.Value).Action == item.Key, "Valid action");
+Reject(() => Parse("browser.navigate", "{\"key\":\"shell\"}"), "Navigation key allowlist");
+Reject(() => Parse("app.launch", "{\"appId\":\"cmd.exe\"}"), "Application launch allowlist");
+Reject(() => Parse("app.launch", "{\"appId\":\"youtube\",\"url\":\"https://example.com\"}"), "Launch destinations are resolved only on the agent");
+Reject(() => Parse("input.drag", "{\"phase\":\"hold\",\"dx\":0,\"dy\":0}"), "Drag phase allowlist");
+Reject(() => Parse("input.drag", "{\"phase\":\"move\",\"dx\":1001,\"dy\":0}"), "Drag movement bounds");
+Reject(() => Parse("browser.navigate", "{\"key\":\"up\",\"url\":\"https://example.com\"}"), "Navigation rejects arbitrary targets");
 foreach (var sample in new[] { ("input.key", "{\"key\":\"powershell\"}"), ("input.text", "{\"text\":\"\"}"), ("input.pointer", "{\"dx\":1001,\"dy\":0}"), ("input.scroll", "{\"delta\":1.5}"), ("browser.command", "{\"command\":\"seek\"}"), ("queue.clear", "{\"unknown\":true}"), ("shell", "{}"), ("input.key", "{\"key\":\"up\",\"key\":\"down\"}") }) Reject(() => Parse(sample.Item1, sample.Item2), sample.ToString());
 Reject(() => Parse("input.text", JsonSerializer.Serialize(new { text = new string('a', 4097) })), "Oversized text");
 Reject(() => Parse("queue.clear", "{}", 0), "Zero sequence");

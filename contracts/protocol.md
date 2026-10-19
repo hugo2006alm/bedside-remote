@@ -5,11 +5,12 @@ This file is the shared implementation contract. All components must follow thes
 ## Network and pairing
 
 - Windows advertises `_bedside-remote._tcp` using DNS-SD/mDNS. Default HTTPS port: 8765. TXT `version=1`. Discovery supplies an address, never trust.
-- Windows owns a persistent self-signed TLS certificate. Its SHA-256 DER fingerprint (64 hex digits) is shown on the Windows pairing screen. Android requires the user to enter/verify that fingerprint from Windows before sending any pairing secret. Pin matching is mandatory for both HTTPS and WSS; do not install a trust-all fallback.
+- Windows owns a persistent self-signed TLS certificate. Its SHA-256 DER fingerprint (64 hex digits) is shown on the Windows pairing screen. Android may read an untrusted candidate through a TLS-only probe to the numeric LAN address; that probe sends no HTTP request or secret and is isolated from authenticated clients. The user must compare the displayed full fingerprint with Windows before sending the pairing code. Pin matching is mandatory for both HTTPS and WSS; no trust-all authenticated fallback is permitted.
 - Windows opens a five-minute pairing window showing a cryptographically random six-digit code. `POST /pair` accepts `{version:1,deviceName:string,code:string}` only during this window. Rate-limit attempts. Windows must explicitly approve each new device in its local UI.
 - Response: `{version:1,deviceId:string,token:string,deviceName:string}`. Token is random 256-bit, stored with Windows DPAPI and Android Keystore encryption. Fingerprint/address are retained per computer.
 - `GET /ws` upgrades to WSS with `Authorization: Bearer <token>`. Reject browser Origin headers, public remote addresses, invalid/revoked tokens and oversized messages (64 KiB). No credentials in URLs or logs. Close active connections on revocation and agent exit. Ping every 20 seconds, with a 15-second pong deadline. A rate-limit close uses 1013 (retry later), not a revocation signal. Only HTTP 401 during authentication establishes revoked/invalid credentials; a legacy 1008 close is retryable.
 - `GET /health` returns only `{version:1,name:string}`. No control is possible without authentication. LAN includes RFC1918 IPv4, loopback, IPv6 link-local and ULA only.
+- Optional `GET /apps` requires the same bearer authentication and pinned TLS as WSS. It returns `{version:1,controls:["drag","desktopNavigation"],apps:[{appId,name,kind:"app"|"browser"}]}`. The fixed IDs are `youtube`, `netflix`, `spotify`, `stremio`, `vlc`; the catalog contains no executable paths. Older agents may return 404. This separate endpoint preserves the strict v1 state shape; Android sends new input/launch actions only when advertised.
 
 ## Android to Windows
 
@@ -26,9 +27,13 @@ Android retains text/link drafts until a successful acknowledgement, clears pend
 | `input.pointer` | `{dx:number,dy:number}`; finite, each between -1000 and 1000. |
 | `input.click` | `{button:"left"|"right"}` |
 | `input.scroll` | `{delta:integer}`; -1200..1200, Windows wheel units. |
+| `input.navigate` | `{key:"up"|"down"|"left"|"right"|"enter"|"escape"}`; spatially select visible accessible controls in the foreground Windows application, then activate with Enter. No scroll fallback; unsupported apps require touchpad. |
+| `input.drag` | `{phase:"start"|"move"|"end",dx:number,dy:number}`; finite deltas -1000..1000. Hold left button for this authenticated connection only. Renew at least every 500 ms while held; release on end, disconnect, foreground change or 2-second inactivity. |
+| `app.launch` | `{appId:"youtube"|"netflix"|"spotify"|"stremio"|"vlc"}`; agent resolves only its own fixed destinations and detected installations. Reject unavailable apps, arbitrary paths, arguments and URLs. |
 | `media.command` | `{command:"playPause"|"next"|"previous"|"volumeUp"|"volumeDown"|"mute"|"seekForward"|"seekBackward"}` |
 | `browser.command` | `{command:"playPause"|"seek"|"skipIntro"|"skipRecap"|"nextEpisode"|"fullscreen"|"subtitles"|"audio",position?:number}`; `seek` requires finite nonnegative seconds. |
 | `browser.select` | `{sessionId:string}`; must exist in current state. |
+| `browser.navigate` | `{key:"up"|"down"|"left"|"right"|"enter"|"escape"}`; move DOM focus or activate a control in the selected session. Requires matching updated agent/extension components; older agents reject this optional action. Rejected navigation never falls back to desktop input. |
 | `youtube.enqueue` | `{url:string,mode:"now"|"next"|"last"}`; HTTPS official YouTube links only; canonical video ID matches `[A-Za-z0-9_-]{11}`. |
 | `queue.remove` | `{entryId:string}` |
 | `queue.move` | `{entryId:string,index:integer}`; zero-based within current queue. |
@@ -60,5 +65,9 @@ Extension to host: `{version:1,type:"browser.state",activeTabId?:number,tabs:[<p
 Host to extension: `{version:1,type:"browser.command",id:string,tabId?:number,command:string,position?:number,url?:string}`. Commands are the browser command names above plus `openYoutube` (validated canonical YouTube URL; select suitable tab or create one) and `selectTab` (required compatible tabId, no URL/position; synchronize the remote target without invoking a player action). Android `browser.select` must synchronize this extension target before acknowledging success; actual browser/popup selection changes also update the agent target. If tabId is absent for a player command, select the active compatible tab. Avoid fixed mouse coordinates and private streaming APIs. A disconnected native host must reconnect with bounded backoff.
 
 After connecting to the interactive agent's pipe, the native executable sends the optional host-to-extension notice `{version:1,type:"native.ready"}` with no additional keys. Creating a browser Port does not establish connectivity: the popup remains connecting until this notice or a valid command arrives, and reports an unconfirmed connection after five seconds. A valid command also confirms older v1 hosts; state publishing remains enabled while confirmation is pending. Older extensions ignore the unknown notice. Manual retry replaces the old port; callbacks from superseded ports cannot change current status.
+
+Native focus commands are `navigateUp`, `navigateDown`, `navigateLeft`, `navigateRight`, `navigateEnter` and `navigateBack`. They require an explicit tab ID, forbid URL/position payloads and operate only on public, visible, enabled DOM controls. They are not playback capabilities and do not change the v1 state shape. Browser arrows select by spatial position, scroll the selected element into view and draw a focus outline; Enter activates the selection. Modal focus stays inside the visible dialog. Windows mode retains ordinary universal keys.
+
+Content snapshots carry a per-document instance ID. On route changes the background requests a fresh snapshot and preserves the selected tab. A new instance or sender/current URL mismatch requires proof from the current top document, preventing old documents from restoring stale state while allowing History API navigation. Rejected snapshots are retried even if media values have not changed.
 
 Incompatible protocol changes require a new major protocol version. Application releases share one SemVer; protocol v1 components remain compatible across application patch/minor releases.

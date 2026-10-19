@@ -1,6 +1,9 @@
 export const HOST_NAME = 'com.bedside.remote';
 export const COMMANDS = ['playPause', 'seek', 'skipIntro', 'skipRecap', 'nextEpisode', 'fullscreen', 'subtitles', 'audio'] as const;
 export type Command = typeof COMMANDS[number];
+export const NAVIGATION = ['navigateUp', 'navigateDown', 'navigateLeft', 'navigateRight', 'navigateEnter', 'navigateBack'] as const;
+export type NavigationCommand = typeof NAVIGATION[number];
+export function isNavigation(command: string): command is NavigationCommand { return (NAVIGATION as readonly string[]).includes(command); }
 export interface Playback {
   platform: 'youtube' | 'netflix';
   tabId: number;
@@ -21,7 +24,7 @@ export interface NativeCommand {
   type: 'browser.command';
   id: string;
   tabId?: number;
-  command: Command | 'openYoutube' | 'selectTab';
+  command: Command | NavigationCommand | 'openYoutube' | 'selectTab';
   position?: number;
   url?: string;
 }
@@ -36,8 +39,9 @@ export function parseNativeCommand(value: unknown): NativeCommand {
   if (!object(value) || !onlyKeys(value, ['version', 'type', 'id', 'tabId', 'command', 'position', 'url']) ||
       value.version !== 1 || value.type !== 'browser.command' || typeof value.id !== 'string' || !value.id || value.id.length > 128 ||
       (value.tabId !== undefined && (!Number.isSafeInteger(value.tabId) || (value.tabId as number) < 0)) ||
-      typeof value.command !== 'string' || ![...COMMANDS, 'openYoutube', 'selectTab'].includes(value.command)) throw new Error('Invalid browser command.');
+      typeof value.command !== 'string' || ![...COMMANDS, ...NAVIGATION, 'openYoutube', 'selectTab'].includes(value.command)) throw new Error('Invalid browser command.');
   if (value.command === 'selectTab' && value.tabId === undefined) throw new Error('Tab selection requires a tab ID.');
+  if (isNavigation(value.command) && value.tabId === undefined) throw new Error('Navigation requires an explicit tab ID.');
   if (value.command === 'seek') {
     if (typeof value.position !== 'number' || !Number.isFinite(value.position) || value.position < 0 || value.url !== undefined) throw new Error('Invalid seek position.');
   } else if (value.position !== undefined) throw new Error('Unexpected position.');

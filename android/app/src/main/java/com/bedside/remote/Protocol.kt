@@ -55,6 +55,28 @@ data class Acknowledgement(
     val error: String? = null,
 )
 
+@Serializable data class MediaApp(val appId: String, val name: String, val kind: String)
+
+@Serializable
+data class AgentCatalog(
+    val version: Int = 1,
+    val controls: List<String> = emptyList(),
+    val apps: List<MediaApp> = emptyList(),
+) {
+    fun validate(): AgentCatalog {
+        require(version == 1 && apps.size <= 5 && controls.size <= 8)
+        require(apps.map { it.appId }.distinct().size == apps.size)
+        require(
+            apps.all {
+                it.appId in setOf("youtube", "netflix", "spotify", "stremio", "vlc") &&
+                    it.name.length in 1..64 &&
+                    it.kind in setOf("browser", "app")
+            }
+        )
+        return this
+    }
+}
+
 @Serializable
 data class RemoteState(
     val version: Int = 1,

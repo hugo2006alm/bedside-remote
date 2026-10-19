@@ -13,6 +13,34 @@ using BedsideRemote.Core;
 
 var checks = 0;
 void Check(bool condition, string message) { if (!condition) throw new Exception(message); checks++; }
+var launchedApps = new List<System.Diagnostics.ProcessStartInfo>();
+var mediaApps = new MediaApps(launchedApps.Add);
+mediaApps.Launch("youtube");
+Check(launchedApps.Single().FileName == "https://www.youtube.com/" && launchedApps.Single().UseShellExecute, "YouTube launch resolves only the fixed official destination through a simulated process launcher.");
+mediaApps.Launch("netflix");
+Check(launchedApps[1].FileName == "microsoft-edge:https://www.netflix.com/" || launchedApps[1].Arguments == @"shell:AppsFolder\4DF9E0F8.Netflix_mcm4njqhnhss8!Netflix", "Netflix resolves only its fixed official Edge destination or recognized Store identity.");
+var focusBounds = new[] { new System.Windows.Rect(0, 0, 50, 50), new System.Windows.Rect(100, 0, 50, 50), new System.Windows.Rect(0, 100, 50, 50) };
+Check(DesktopNavigation.Nearest(focusBounds, 0, "right") == 1 && DesktopNavigation.Nearest(focusBounds, 0, "down") == 2 && DesktopNavigation.Nearest(focusBounds, 1, "right") == 1, "TV navigation chooses visible neighbors by direction and preserves selection at an edge.");
+var dragEvents = new List<uint>();
+var drag = new PointerDrag((flags, _, _) => dragEvents.Add(flags), () => new IntPtr(1));
+using (var dragLifetime = new CancellationTokenSource())
+using (var otherLifetime = new CancellationTokenSource())
+{
+    drag.Handle("start", 0, 0, dragLifetime.Token);
+    drag.Handle("move", 15, 5, dragLifetime.Token);
+    try { drag.Handle("end", 0, 0, otherLifetime.Token); throw new Exception("Another connection released a drag."); }
+    catch (InvalidOperationException) { Check(drag.Active, "A different connection cannot change an active drag."); }
+    dragLifetime.Cancel();
+    Check(!drag.Active && dragEvents.SequenceEqual(new uint[] { 2, 1, 4 }), "Disconnect cancellation releases the held button exactly once without real desktop input.");
+}
+var released = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+var expiringDrag = new PointerDrag((flags, _, _) => { if (flags == 4) released.TrySetResult(); }, () => new IntPtr(1), 100);
+using (var leaseOwner = new CancellationTokenSource())
+{
+    expiringDrag.Handle("start", 0, 0, leaseOwner.Token);
+    await released.Task.WaitAsync(TimeSpan.FromSeconds(3));
+    Check(!expiringDrag.Active, "Missing drag heartbeats expire and release the button.");
+}
 Check(NativeBridge.IsAuthorizedInvocation(new[] { NativeBridge.EdgeOrigin, "--parent-window=0" }) && NativeBridge.IsAuthorizedInvocation(new[] { NativeBridge.EdgeOrigin }), "Edge native startup accepts only its fixed origin and optional numeric parent handle.");
 Check(!NativeBridge.IsAuthorizedInvocation(new[] { "chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/", "--parent-window=0" }) && !NativeBridge.IsAuthorizedInvocation(new[] { NativeBridge.EdgeOrigin, "--parent-window=bad" }) && !NativeBridge.IsAuthorizedInvocation(new[] { NativeBridge.EdgeOrigin, "--parent-window=0", "extra" }), "Edge native startup rejects foreign origins, invalid parent handles and extra arguments.");
 Check(DiscoveryAddresses.Encode(new[] { "100.65.203.96", "192.168.1.28", "127.0.0.1", "8.8.8.8", "192.168.1.28", "fd12::1" }.Select(IPAddress.Parse)) == "192.168.1.28", "Discovery TXT hints contain distinct private IPv4 addresses only, excluding VPN CGNAT, public and loopback addresses.");
@@ -106,6 +134,7 @@ try
     using var handler = new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, cert, _, _) => cert != null && CryptographicOperations.FixedTimeEquals(SHA256.HashData(cert.RawData), pin) };
     using var http = new HttpClient(handler) { BaseAddress = new Uri($"https://127.0.0.1:{port}") };
     var health = await http.GetFromJsonAsync<JsonElement>("/health", token);
+    using (var unpairedApps = await http.GetAsync("/apps", token)) Check(unpairedApps.StatusCode == HttpStatusCode.Unauthorized, "Installed media apps are not exposed before authentication.");
     Check(health.GetProperty("version").GetInt32() == 1 && health.EnumerateObject().Count() == 2, "Minimal health response.");
     using var wrongPinHandler = new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => false };
     using var wrongPin = new HttpClient(wrongPinHandler);
@@ -119,6 +148,15 @@ try
     Check(pairResponse.IsSuccessStatusCode, "Approved pairing succeeds.");
     var paired = await pairResponse.Content.ReadFromJsonAsync<JsonElement>(token);
     var credential = paired.GetProperty("token").GetString()!; var deviceId = paired.GetProperty("deviceId").GetString()!;
+    using (var appRequest = new HttpRequestMessage(HttpMethod.Get, "/apps"))
+    {
+        appRequest.Headers.Authorization = new("Bearer", credential);
+        using var appResponse = await http.SendAsync(appRequest, token);
+        var catalog = await appResponse.Content.ReadFromJsonAsync<JsonElement>(token);
+        Check(appResponse.IsSuccessStatusCode && catalog.GetProperty("controls").EnumerateArray().Any(control => control.GetString() == "drag") && catalog.GetProperty("apps").EnumerateArray().Any(item => item.GetProperty("appId").GetString() == "youtube"), "Authenticated app catalog exposes fixed identities and optional controls without changing state snapshots.");
+        try { engine.Apps.Launch("powershell.exe"); throw new Exception("Arbitrary app was launched."); }
+        catch (InvalidOperationException) { checks++; }
+    }
     Check(credential.Length == 44 && server.Devices.Length == 1, "Per-device credentials issued.");
     Check(!Encoding.UTF8.GetString(File.ReadAllBytes(Path.Combine(root, "devices.dpapi"))).Contains(credential, StringComparison.Ordinal), "Credentials protected on disk.");
     await ExpectSocketRejection(null, null); await ExpectSocketRejection(credential, "https://evil.example");
@@ -165,6 +203,17 @@ try
     var nextState = await ReadUntil(socket, x => x.GetProperty("type").GetString() == "state" && x.GetProperty("playback").ValueKind == JsonValueKind.Object && x.GetProperty("playback").GetProperty("videoId").GetString() == "abcdefghijk");
     Check(nextState.GetProperty("queue").GetArrayLength() == 2 && nextState.GetProperty("currentEntryId").GetString() != null, "Current queue entry retained and synchronized.");
     Check(storage.Read<QueueSnapshot>("queue.json")!.Queue.Count == 2, "Queue persisted to disk.");
+    using (var navigation = await ConnectSocket(credential))
+    {
+        await Read(navigation);
+        var id = Guid.NewGuid().ToString();
+        var beforeInput = injectedInputs;
+        await SendCommand(navigation, id, 1, "browser.navigate", new { key = "right" });
+        var focus = await ReadNative(native);
+        Check(focus.GetProperty("command").GetString() == "navigateRight" && focus.GetProperty("tabId").GetInt32() == 7, "D-pad navigation targets the explicitly selected browser tab.");
+        await SendResult(native, focus);
+        Check((await Ack(navigation, id)).GetProperty("ok").GetBoolean() && injectedInputs == beforeInput, "Browser focus navigation does not inject Windows scrolling or keyboard input.");
+    }
     using (var disconnecting = await ConnectSocket(credential))
     {
         await Read(disconnecting);

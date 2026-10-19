@@ -6,6 +6,7 @@ namespace BedsideRemote.Agent;
 
 public static class DesktopInput
 {
+    private static readonly PointerDrag Drag = new((flags, x, y) => MouseEvent(flags, x, y), GetForegroundWindow);
     private static readonly Dictionary<string, ushort> Keys = new()
     {
         ["up"] = 0x26,
@@ -28,6 +29,18 @@ public static class DesktopInput
     public static async Task ExecuteAsync(Command command, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
+        if (command.Action == "input.drag")
+        {
+            var payload = command.Payload;
+            Drag.Handle(payload.GetProperty("phase").GetString()!, (int)Math.Round(payload.GetProperty("dx").GetDouble()), (int)Math.Round(payload.GetProperty("dy").GetDouble()), token);
+            return;
+        }
+        if (Drag.Active) throw new InvalidOperationException("Finish the current drag before sending another desktop action.");
+        if (command.Action == "input.navigate")
+        {
+            DesktopNavigation.Execute(command.Payload.GetProperty("key").GetString()!, token);
+            return;
+        }
         if (command.Action == "input.text")
         {
             var target = GetForegroundWindow();
@@ -100,6 +113,7 @@ public static class DesktopInput
         }
     }
     private static void Key(ushort key) => Send(new Input { Type = 1, Data = new Union { Keyboard = new Keyboard { VirtualKey = key } } }, new Input { Type = 1, Data = new Union { Keyboard = new Keyboard { VirtualKey = key, Flags = 2 } } });
+    internal static void NavigationKey(string key) => Key(Keys[key]);
     private static void MouseEvent(uint flags, int x = 0, int y = 0, uint data = 0) => Send(new Input { Data = new Union { Mouse = new Mouse { X = x, Y = y, Data = data, Flags = flags } } });
     private static void Send(params Input[] inputs) => SendBatch(inputs, batch => SendInput((uint)batch.Length, batch, Marshal.SizeOf<Input>()));
     internal static void SendBatch(Input[] inputs, Func<Input[], uint> emit)

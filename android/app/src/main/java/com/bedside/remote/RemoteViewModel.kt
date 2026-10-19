@@ -21,6 +21,7 @@ data class AppState(
     val selectedId: String? = null,
     val status: ConnectionStatus = ConnectionStatus.DISCONNECTED,
     val remote: RemoteState = RemoteState(),
+    val catalog: AgentCatalog = AgentCatalog(),
     val error: String? = null,
     val notice: String? = null,
     val pairing: Boolean = false,
@@ -35,6 +36,7 @@ data class AppState(
     val videoAccepted: Long = 0,
     val videoAcceptedUrl: String? = null,
     val endpointSaving: Boolean = false,
+    val dragRejected: Long = 0,
 ) {
     val connected: Boolean
         get() = status == ConnectionStatus.CONNECTED
@@ -60,15 +62,19 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
                         status = status,
                         remote =
                             if (status == ConnectionStatus.CONNECTED) it.remote else RemoteState(),
+                        catalog =
+                            if (status == ConnectionStatus.CONNECTED) it.catalog else AgentCatalog(),
                     )
                 }
             },
             onState = { remote -> mutableState.update { it.copy(remote = remote) } },
+            onCatalog = { catalog -> mutableState.update { it.copy(catalog = catalog) } },
             onError = { error -> mutableState.update { it.copy(error = error) } },
             onAccepted = {},
             onResult = { _, action, ok ->
                 mutableState.update {
                     when (action) {
+                        "input.drag" -> if (ok) it else it.copy(dragRejected = it.dragRejected + 1)
                         "input.text" ->
                             it.copy(
                                 textPending = false,
@@ -302,6 +308,36 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
 
     fun key(key: String) {
         command("input.key", "key" to JsonPrimitive(key))
+    }
+
+    fun navigate(key: String) {
+        if (mutableState.value.remote.activeSessionId != null)
+            command("browser.navigate", "key" to JsonPrimitive(key))
+        else desktopNavigate(key)
+    }
+
+    fun desktopNavigate(key: String) {
+        if ("desktopNavigation" in mutableState.value.catalog.controls)
+            command("input.navigate", "key" to JsonPrimitive(key))
+        else
+            showError(
+                "Update the Windows agent to use icon navigation. Touchpad and keyboard remain available."
+            )
+    }
+
+    fun launchApp(appId: String) {
+        if (mutableState.value.catalog.apps.none { it.appId == appId }) return
+        command("app.launch", "appId" to JsonPrimitive(appId))
+    }
+
+    fun drag(phase: String, dx: Float, dy: Float) {
+        if ("drag" !in mutableState.value.catalog.controls) return
+        command(
+            "input.drag",
+            "phase" to JsonPrimitive(phase),
+            "dx" to JsonPrimitive((dx * mutableState.value.sensitivity).coerceIn(-1000f, 1000f)),
+            "dy" to JsonPrimitive((dy * mutableState.value.sensitivity).coerceIn(-1000f, 1000f)),
+        )
     }
 
     fun media(command: String) {

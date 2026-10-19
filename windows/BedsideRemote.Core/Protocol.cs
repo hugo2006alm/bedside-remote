@@ -51,6 +51,12 @@ public static partial class Protocol
             case "input.pointer": Fields(p, "dx", "dy"); Number(p, "dx", -1000, 1000); Number(p, "dy", -1000, 1000); break;
             case "input.click": Fields(p, "button"); OneOf(Text(p, "button"), ["left", "right"]); break;
             case "input.scroll": Fields(p, "delta"); Integer(p, "delta", -1200, 1200); break;
+            case "input.navigate": Fields(p, "key"); OneOf(Text(p, "key"), ["up", "down", "left", "right", "enter", "escape"]); break;
+            case "input.drag":
+                Fields(p, "phase", "dx", "dy"); OneOf(Text(p, "phase"), ["start", "move", "end"]);
+                Number(p, "dx", -1000, 1000); Number(p, "dy", -1000, 1000); break;
+            case "app.launch": Fields(p, "appId"); OneOf(Text(p, "appId"), ["youtube", "netflix", "spotify", "stremio", "vlc"]); break;
+            case "browser.navigate": Fields(p, "key"); OneOf(Text(p, "key"), ["up", "down", "left", "right", "enter", "escape"]); break;
             case "media.command": Fields(p, "command"); OneOf(Text(p, "command"), ["playPause", "next", "previous", "volumeUp", "volumeDown", "mute", "seekForward", "seekBackward"]); break;
             case "browser.command":
                 Fields(p, "command", "position"); var name = Text(p, "command"); OneOf(name, BrowserCommands);

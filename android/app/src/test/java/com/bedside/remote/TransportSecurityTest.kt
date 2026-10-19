@@ -24,6 +24,133 @@ import org.junit.Test
 
 class TransportSecurityTest {
     @Test
+    fun mediaLaunchUsesOnlyTheCurrentlyConnectedComputer() {
+        server().use { first ->
+            server().use { second ->
+                val openedFirst = CountDownLatch(1)
+                val openedSecond = CountDownLatch(1)
+                val receivedSecond = CountDownLatch(1)
+                val firstCommands = java.util.concurrent.atomic.AtomicInteger()
+                first.enqueue(
+                    MockResponse()
+                        .withWebSocketUpgrade(
+                            object : WebSocketListener() {
+                                override fun onOpen(webSocket: WebSocket, response: Response) {
+                                    openedFirst.countDown()
+                                }
+
+                                override fun onMessage(webSocket: WebSocket, text: String) {
+                                    firstCommands.incrementAndGet()
+                                }
+
+                                override fun onClosing(
+                                    webSocket: WebSocket,
+                                    code: Int,
+                                    reason: String,
+                                ) {
+                                    webSocket.close(code, reason)
+                                }
+                            }
+                        )
+                )
+                second.enqueue(
+                    MockResponse()
+                        .withWebSocketUpgrade(
+                            object : WebSocketListener() {
+                                override fun onOpen(webSocket: WebSocket, response: Response) {
+                                    openedSecond.countDown()
+                                }
+
+                                override fun onMessage(webSocket: WebSocket, text: String) {
+                                    val message = WireJson.parseToJsonElement(text).jsonObject
+                                    if (
+                                        message["action"]?.jsonPrimitive?.content == "app.launch" &&
+                                            message["payload"]
+                                                ?.jsonObject
+                                                ?.get("appId")
+                                                ?.jsonPrimitive
+                                                ?.content == "youtube"
+                                    )
+                                        receivedSecond.countDown()
+                                }
+
+                                override fun onClosing(
+                                    webSocket: WebSocket,
+                                    code: Int,
+                                    reason: String,
+                                ) {
+                                    webSocket.close(code, reason)
+                                }
+                            }
+                        )
+                )
+                val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+                val connected = java.util.concurrent.Semaphore(0)
+                val transport =
+                    RemoteTransport(
+                        scope,
+                        { if (it == ConnectionStatus.CONNECTED) connected.release() },
+                        {},
+                        {},
+                        {},
+                    )
+                try {
+                    transport.connect(
+                        PairedComputer(
+                            "first",
+                            "First",
+                            "127.0.0.1",
+                            first.port,
+                            fingerprint,
+                            "first-token",
+                        )
+                    )
+                    assertTrue(
+                        openedFirst.await(5, TimeUnit.SECONDS) &&
+                            connected.tryAcquire(5, TimeUnit.SECONDS)
+                    )
+                    transport.connect(
+                        PairedComputer(
+                            "second",
+                            "Second",
+                            "127.0.0.1",
+                            second.port,
+                            fingerprint,
+                            "second-token",
+                        )
+                    )
+                    assertTrue(
+                        openedSecond.await(5, TimeUnit.SECONDS) &&
+                            connected.tryAcquire(5, TimeUnit.SECONDS)
+                    )
+                    transport.send(
+                        "app.launch",
+                        JsonObject(mapOf("appId" to JsonPrimitive("youtube"))),
+                    )
+                    assertTrue(receivedSecond.await(5, TimeUnit.SECONDS))
+                    assertEquals(0, firstCommands.get())
+                } finally {
+                    transport.disconnect()
+                    scope.cancel()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun fingerprintProbeReadsCandidateWithoutSendingAnyHttpRequest() = runBlocking {
+        server().use { server ->
+            assertEquals(
+                fingerprint.uppercase(),
+                RemoteTransport.readFingerprint("127.0.0.1", server.port),
+            )
+            assertEquals(0, server.requestCount)
+            assertNull(server.takeRequest(200, TimeUnit.MILLISECONDS))
+        }
+        assertTrue(runCatching { RemoteTransport.readFingerprint("8.8.8.8", 443) }.isFailure)
+    }
+
+    @Test
     fun transientCloseDoesNotRevokeValidPairing() {
         for (code in listOf(1008, 1013)) {
             server().use { server ->

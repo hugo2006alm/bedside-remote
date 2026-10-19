@@ -7,6 +7,7 @@ public sealed class Engine
 {
     private readonly object sync = new();
     private readonly Storage storage;
+    public MediaApps Apps { get; } = new();
     private readonly Func<Command, CancellationToken, Task> desktopInput;
     private static readonly SemaphoreSlim DesktopSync = new(1);
     private readonly SemaphoreSlim browserCommands = new(1);
@@ -138,6 +139,7 @@ public sealed class Engine
     public async Task ExecuteAsync(Command command, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
+        if (command.Action == "app.launch") { Apps.Launch(command.Payload.GetProperty("appId").GetString()!); return; }
         if (IsImmediate(command))
         {
             if (!DesktopSync.Wait(0)) throw new InvalidOperationException("Desktop input is busy. Wait for it to finish; this action was not queued.");
@@ -151,6 +153,19 @@ public sealed class Engine
     }
     private async Task ExecuteBrowserAsync(Command command, CancellationToken token)
     {
+        if (command.Action == "browser.navigate")
+        {
+            var key = command.Payload.GetProperty("key").GetString()!;
+            var action = key switch { "up" => "navigateUp", "down" => "navigateDown", "left" => "navigateLeft", "right" => "navigateRight", "enter" => "navigateEnter", "escape" => "navigateBack", _ => throw new FormatException("Unsupported navigation key.") };
+            NativeConnection connection; int tabId;
+            lock (sync)
+            {
+                var selected = FindActive() ?? throw new InvalidOperationException("Select a browser session before navigating.");
+                connection = selected.Connection; tabId = selected.Tab.GetProperty("tabId").GetInt32();
+            }
+            CheckResult(await connection.CommandAsync(new() { ["command"] = action, ["tabId"] = tabId }, token));
+            return;
+        }
         if (command.Action == "media.command")
         {
             var value = command.Payload.GetProperty("command").GetString();

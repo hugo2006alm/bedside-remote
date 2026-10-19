@@ -114,9 +114,15 @@ listen((message: unknown, sender) => {
     if (!onlyKeys(message, ['type', 'instance', 'state']) || typeof message.instance !== 'string' || message.instance.length > 64 || !isPlayerState(message.state) || platformForUrl(sender.url ?? '') !== message.state.platform) return undefined;
     const state = message.state;
     const instance = message.instance;
-    return browser.tabs.get(tabId).then(tab => {
-      // Ignore late messages from a document that has already navigated away.
-      if (tab.url !== sender.url) return;
+    return browser.tabs.get(tabId).then(async tab => {
+      if (platformForUrl(tab.url ?? '') !== state.platform) return { ok: false };
+      // SPA routes can change while sender.url still names the original document.
+      // Ask the current top document to prove its instance before admitting a new
+      // instance or a URL mismatch; late messages from replaced documents fail.
+      if (tabs.get(tabId)?.instance !== instance || tab.url !== sender.url) {
+        const current: unknown = await browser.tabs.sendMessage(tabId, { type: 'player.identity' }, { frameId: 0 });
+        if (!object(current) || current.instance !== instance || current.url !== tab.url) return { ok: false };
+      }
       const previous = tabs.get(tabId)?.state;
       tabs.set(tabId, { instance, state: { ...state, tabId } });
       if (activeTabId === undefined || pendingActiveTabId === tabId) {
@@ -126,7 +132,8 @@ listen((message: unknown, sender) => {
       const stable = (value: typeof state | undefined) => value ? JSON.stringify({ ...value, tabId: undefined, position: 0 }) : '';
       if (stable(previous) === stable(state)) publishProgress();
       else publish();
-    }).catch(() => {});
+      return { ok: true };
+    }).catch(() => ({ ok: false }));
   }
   if (message.type === 'player.gone' && sender.tab?.id !== undefined && sender.frameId === 0) {
     if (tabs.get(sender.tab.id)?.instance === message.instance) forget(sender.tab.id);
@@ -151,7 +158,14 @@ listen((message: unknown, sender) => {
 });
 browser.tabs.onRemoved.addListener(forget);
 browser.tabs.onUpdated.addListener((tabId, change) => {
-  if (change.status === 'loading' || change.url) forget(tabId);
+  if (change.status === 'loading' || change.url) {
+    const selected = activeTabId === tabId || pendingActiveTabId === tabId;
+    forget(tabId);
+    if (selected) pendingActiveTabId = tabId;
+    // A History API route does not reload its content script. Request a fresh
+    // snapshot even when the media values happen to equal the previous snapshot.
+    void browser.tabs.sendMessage(tabId, { type: 'player.snapshot' }, { frameId: 0 }).catch(() => {});
+  }
 });
 browser.tabs.onActivated.addListener(({ tabId }) => {
   if (tabs.has(tabId)) { activeTabId = tabId; pendingActiveTabId = undefined; publish(); }
