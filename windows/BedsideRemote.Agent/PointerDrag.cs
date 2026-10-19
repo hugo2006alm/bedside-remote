@@ -32,7 +32,18 @@ internal sealed class PointerDrag(Action<uint, int, int> emit, Func<IntPtr> fore
             {
                 if (dx != 0 || dy != 0) emit(1, dx, dy);
                 expires = Environment.TickCount64 + leaseMilliseconds;
-                lease ??= new System.Threading.Timer(_ => { lock (sync) { if (Environment.TickCount64 >= expires) Release(); } });
+                lease ??= new System.Threading.Timer(_ =>
+                {
+                    lock (sync)
+                    {
+                        if (owner == null) return;
+                        var remaining = expires - Environment.TickCount64;
+                        // Timer and TickCount64 can cross a clock tick differently.
+                        // An early callback must schedule the remaining lease, not lose it.
+                        if (remaining > 0) lease!.Change((int)Math.Min(remaining, int.MaxValue), Timeout.Infinite);
+                        else Release();
+                    }
+                });
                 lease.Change(leaseMilliseconds, Timeout.Infinite);
             }
             catch { Release(); throw; }
