@@ -8,7 +8,7 @@ This file is the shared implementation contract. All components must follow thes
 - Windows owns a persistent self-signed TLS certificate. Its SHA-256 DER fingerprint (64 hex digits) is shown on the Windows pairing screen. Android requires the user to enter/verify that fingerprint from Windows before sending any pairing secret. Pin matching is mandatory for both HTTPS and WSS; do not install a trust-all fallback.
 - Windows opens a five-minute pairing window showing a cryptographically random six-digit code. `POST /pair` accepts `{version:1,deviceName:string,code:string}` only during this window. Rate-limit attempts. Windows must explicitly approve each new device in its local UI.
 - Response: `{version:1,deviceId:string,token:string,deviceName:string}`. Token is random 256-bit, stored with Windows DPAPI and Android Keystore encryption. Fingerprint/address are retained per computer.
-- `GET /ws` upgrades to WSS with `Authorization: Bearer <token>`. Reject browser Origin headers, public remote addresses, invalid/revoked tokens and oversized messages (64 KiB). No credentials in URLs or logs. Close active connections on revocation.
+- `GET /ws` upgrades to WSS with `Authorization: Bearer <token>`. Reject browser Origin headers, public remote addresses, invalid/revoked tokens and oversized messages (64 KiB). No credentials in URLs or logs. Close active connections on revocation and agent exit. Ping every 20 seconds, with a 15-second pong deadline. A rate-limit close uses 1013 (retry later), not a revocation signal. Only HTTP 401 during authentication establishes revoked/invalid credentials; a legacy 1008 close is retryable.
 - `GET /health` returns only `{version:1,name:string}`. No control is possible without authentication. LAN includes RFC1918 IPv4, loopback, IPv6 link-local and ULA only.
 
 ## Android to Windows
@@ -16,6 +16,8 @@ This file is the shared implementation contract. All components must follow thes
 Every command: `{version:1,type:"command",id:<UUID>,sequence:<positive integer>,action:string,payload:object}`. Sequence strictly increases within each authenticated connection. No command replay after reconnect. Server replies `{version:1,type:"ack",id:string,ok:boolean,error?:string}`. Acknowledgement means command accepted/executed, not proof of browser autoplay success.
 
 Universal input remains responsive while browser work is pending. Admit only one slow browser operation at a time; reject additional work promptly with a busy error instead of executing stale queued commands. Native result timeout is 20 seconds; Android waits 25 seconds for browser/queue acknowledgements and 10 seconds for ordinary input. Text delivery is paced and runs separately from socket reads, with a 300-second server deadline and a 315-second Android acknowledgement deadline for the maximum 4096 UTF-16 units. While text is being delivered, reject competing desktop input promptly instead of queueing it; browser/queue operations remain available. Stop text on foreground-window changes, disconnect or expiry. Some text may already have been entered when an error occurs; never automatically replay it.
+
+Android retains text/link drafts until a successful acknowledgement, clears pending state on rejection/disconnect and never resends automatically. Browser-session selection remains available even when the previous target disappears and playback is null. Persist the queue only when queue contents/current entry change; progress-only snapshots do not rewrite storage.
 
 | Action | Payload |
 | --- | --- |

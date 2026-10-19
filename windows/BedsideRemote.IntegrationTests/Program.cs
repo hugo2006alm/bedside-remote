@@ -55,6 +55,26 @@ catch (InvalidOperationException)
 var rejectedPackets = 0;
 try { DesktopInput.SendBatch(layoutPackets[0], _ => { rejectedPackets++; return 0; }); throw new Exception("Rejected native input was accepted."); }
 catch (InvalidOperationException) { Check(rejectedPackets == 1, "Zero accepted input events cannot trigger an unnecessary Shift release."); }
+foreach (var input in new[] {
+    new DesktopInput.Input { Type = 1, Data = new DesktopInput.Union { Keyboard = new DesktopInput.Keyboard { VirtualKey = 0x0D } } },
+    new DesktopInput.Input { Type = 1, Data = new DesktopInput.Union { Keyboard = new DesktopInput.Keyboard { VirtualKey = 0x5B } } },
+    new DesktopInput.Input { Type = 1, Data = new DesktopInput.Union { Keyboard = new DesktopInput.Keyboard { Scan = 'é', Flags = 4 } } },
+    new DesktopInput.Input { Data = new DesktopInput.Union { Mouse = new DesktopInput.Mouse { Flags = 2 } } },
+    new DesktopInput.Input { Data = new DesktopInput.Union { Mouse = new DesktopInput.Mouse { Flags = 8 } } }
+})
+{
+    var release = input;
+    if (input.Type == 1) release.Data.Keyboard.Flags |= 2;
+    else release.Data.Mouse.Flags *= 2;
+    var delivered = new List<DesktopInput.Input[]>();
+    try { DesktopInput.SendBatch([input, release], batch => { delivered.Add(batch); return 1; }); throw new Exception("Partial delivery succeeded."); }
+    catch (InvalidOperationException) { Check(delivered.Count == 2 && delivered[1].Length == 1 && (input.Type == 1 ? delivered[1][0].Data.Keyboard.Flags == release.Data.Keyboard.Flags && delivered[1][0].Data.Keyboard.Scan == input.Data.Keyboard.Scan && delivered[1][0].Data.Keyboard.VirtualKey == input.Data.Keyboard.VirtualKey : delivered[1][0].Data.Mouse.Flags == release.Data.Mouse.Flags), "Partial Enter, Windows, Unicode and mouse presses receive their matching release."); }
+}
+foreach (var work in new[] { new System.Windows.Rect(0, 0, 1280, 680), new System.Windows.Rect(-960, 0, 960, 520), new System.Windows.Rect(0, 0, 640, 440) })
+{
+    var fitted = MainWindow.FitBounds(work, 640, 700);
+    Check(work.Contains(fitted) && fitted.Width > 0 && fitted.Height > 0, "Window fits small/high-DPI and secondary-monitor work areas.");
+}
 var root = Path.Combine(Path.GetTempPath(), "BedsideRemote-tests-" + Guid.NewGuid().ToString("N"));
 var injectedInputs = 0;
 var blockText = false;
@@ -234,6 +254,11 @@ try
         await boundedEngine.UpdateNativeAsync(boundedNative, SelectionState(2), token); Check(ActiveTarget() == "size-test:1", "Explicit Android target survives unchanged native progress state.");
         await boundedEngine.UpdateNativeAsync(boundedNative, SelectionState(1), token);
         await boundedEngine.UpdateNativeAsync(boundedNative, SelectionState(2), token); Check(ActiveTarget() == "size-test:2", "Popup can select its former target after Android selection synchronizes the native pointer.");
+        var queuePath = Path.Combine(root, "bounds", "queue.json");
+        var savedAt = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(queuePath, savedAt);
+        for (var index = 0; index < 20; index++) await boundedEngine.UpdateNativeAsync(boundedNative, SelectionState(2), token);
+        Check(File.GetLastWriteTimeUtc(queuePath) == savedAt, "Repeated playback progress does not rewrite an unchanged persistent queue.");
         var stress = JsonSerializer.SerializeToElement(new { version = 1, type = "browser.state", activeTabId = 0, tabs = Enumerable.Range(0, 32).Select(i => new { platform = "youtube", tabId = i, title = longTitle, videoId = "dQw4w9WgXcQ", channel = new string('語', 2048), thumbnail = new string('語', 2048), error = new string('語', 2048), paused = true, ended = false, position = 0, duration = 0, capabilities = Array.Empty<string>() }).ToArray() }, Protocol.Json);
         await boundedEngine.UpdateNativeAsync(boundedNative, stress, token);
         Check(JsonSerializer.SerializeToUtf8Bytes(boundedEngine.Snapshot(), Protocol.Json).Length <= Protocol.MaxBytes, "Maximum queue/session snapshot remains within 64 KiB even with escaped Unicode metadata.");
@@ -263,10 +288,36 @@ try
             finally { if (!host.HasExited) host.Kill(); }
         }
     }
+    using (var flood = await ConnectSocket(credential))
+    {
+        await Read(flood);
+        for (var index = 1; index <= 151; index++) await SendCommand(flood, Guid.NewGuid().ToString(), index, "input.pointer", new { dx = 0, dy = 0 });
+        var buffer = new byte[65536];
+        WebSocketReceiveResult result;
+        do { result = await flood.ReceiveAsync(buffer, token); } while (result.MessageType != WebSocketMessageType.Close);
+        Check((int?)result.CloseStatus == 1013, "Rate limiting reports a retryable overload rather than authorization revocation.");
+        await flood.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Acknowledged", token);
+    }
+    using (var afterRateLimit = await ConnectSocket(credential)) { await Read(afterRateLimit); Check(true, "Rate limiting preserves the paired credential."); }
     server.Revoke(deviceId);
     Check(server.Devices.Length == 0, "Device removed on revocation.");
     try { await Read(socket); throw new Exception("Revoked socket remained open."); } catch (Exception ex) when (ex is WebSocketException or EndOfStreamException) { checks++; }
     await ExpectSocketRejection(credential, null);
+    code = server.Pairing.Open();
+    using (var replacement = await http.PostAsJsonAsync("/pair", new { version = 1, deviceName = "Shutdown test", code }, token))
+    {
+        var identity = (await replacement.Content.ReadFromJsonAsync<JsonElement>(token)).GetProperty("token").GetString()!;
+        using var stoppingSocket = await ConnectSocket(identity); await Read(stoppingSocket);
+        textStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        textStopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); blockText = true;
+        await SendCommand(stoppingSocket, Guid.NewGuid().ToString(), 1, "input.text", new { text = "cancel on exit" });
+        await textStarted.Task.WaitAsync(token);
+        await Task.WhenAll(server.StopAsync(), server.StopAsync()).WaitAsync(TimeSpan.FromSeconds(5), token);
+        await textStopped.Task.WaitAsync(token);
+        var before = injectedInputs;
+        try { await SendCommand(stoppingSocket, Guid.NewGuid().ToString(), 2, "input.key", new { key = "enter" }); } catch (WebSocketException) { }
+        Check(injectedInputs == before && server.ActiveConnections == 0, "Exit promptly cancels active text and closes existing authenticated sockets; repeated stop is safe.");
+    }
     var previewArgument = args.FirstOrDefault(x => x.StartsWith("--preview=", StringComparison.Ordinal));
     if (previewArgument != null)
     {
@@ -280,7 +331,7 @@ try
                 var window = new MainWindow(storage, new Settings(port), server, Convert.ToHexString(pin));
                 window.SetStatus("Ready · encrypted local control", false);
                 window.BeginAnimation(System.Windows.UIElement.OpacityProperty, null); window.Opacity = 1;
-                var visual = (System.Windows.Controls.ScrollViewer)window.Content; visual.Background = window.Background;
+                var visual = (System.Windows.FrameworkElement)window.Content;
                 visual.Measure(new System.Windows.Size(620, 790)); visual.Arrange(new System.Windows.Rect(0, 0, 620, 790)); visual.UpdateLayout();
                 var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(620, 790, 96, 96, System.Windows.Media.PixelFormats.Pbgra32); bitmap.Render(visual);
                 var png = new System.Windows.Media.Imaging.PngBitmapEncoder(); png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));

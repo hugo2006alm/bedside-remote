@@ -87,7 +87,10 @@ public static class DesktopInput
         {
             case "input.key": Key(Keys[p.GetProperty("key").GetString()!]); break;
             case "input.pointer": MouseEvent(1, (int)Math.Round(p.GetProperty("dx").GetDouble()), (int)Math.Round(p.GetProperty("dy").GetDouble())); break;
-            case "input.click": var left = p.GetProperty("button").GetString() == "left"; MouseEvent(left ? 2u : 8u); MouseEvent(left ? 4u : 16u); break;
+            case "input.click":
+                var left = p.GetProperty("button").GetString() == "left";
+                Send(new Input { Data = new Union { Mouse = new Mouse { Flags = left ? 2u : 8u } } }, new Input { Data = new Union { Mouse = new Mouse { Flags = left ? 4u : 16u } } });
+                break;
             case "input.scroll": MouseEvent(0x800, data: unchecked((uint)p.GetProperty("delta").GetInt32())); break;
             case "media.command":
                 var action = p.GetProperty("command").GetString()!;
@@ -104,9 +107,29 @@ public static class DesktopInput
         var accepted = emit(inputs);
         if (accepted != inputs.Length)
         {
-            // A partially accepted shifted keystroke must not leave our Shift press held.
-            if (accepted > 0 && inputs[0].Type == 1 && inputs[0].Data.Keyboard.VirtualKey == 0x10 && inputs[0].Data.Keyboard.Flags == 0)
-                _ = emit([KeyInput(0x10, true)]);
+            // Release only our own accepted presses that have no accepted matching release.
+            var keys = new Dictionary<(ushort Key, ushort Scan, uint Flags), Input>();
+            var mouse = new HashSet<uint>();
+            foreach (var input in inputs.Take((int)Math.Min(accepted, (uint)inputs.Length)))
+            {
+                if (input.Type == 1)
+                {
+                    var key = input.Data.Keyboard;
+                    var identity = (key.VirtualKey, key.Scan, key.Flags & ~2u);
+                    if ((key.Flags & 2) != 0) keys.Remove(identity);
+                    else { var released = input; released.Data.Keyboard.Flags |= 2; keys[identity] = released; }
+                }
+                else
+                {
+                    foreach (var (down, up) in new[] { (2u, 4u), (8u, 16u), (32u, 64u) })
+                    {
+                        if ((input.Data.Mouse.Flags & down) != 0) mouse.Add(up);
+                        if ((input.Data.Mouse.Flags & up) != 0) mouse.Remove(up);
+                    }
+                }
+            }
+            var cleanup = keys.Values.Reverse().Concat(mouse.Select(flags => new Input { Data = new Union { Mouse = new Mouse { Flags = flags } } })).ToArray();
+            if (cleanup.Length != 0) _ = emit(cleanup);
             throw new InvalidOperationException("Windows could not deliver input. Elevated apps and the secure desktop cannot be controlled.");
         }
     }

@@ -214,6 +214,8 @@ object LocalEndpoint {
         require(port in 1..65535) { "Port must be 1–65535" }
         address(host)
         val clean = host.trim().removeSurrounding("[", "]")
+        // OkHttp's URL grammar cannot carry an IPv6 zone. DNS supplies the scoped route.
+        if ('%' in clean) return "https://bedside.invalid:$port"
         return "https://${if (clean.contains(':')) "[$clean]" else clean}:$port"
     }
 

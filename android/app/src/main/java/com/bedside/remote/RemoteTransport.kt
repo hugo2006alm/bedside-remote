@@ -45,6 +45,7 @@ class RemoteTransport(
     private val onState: (RemoteState) -> Unit,
     private val onError: (String) -> Unit,
     private val onAccepted: (String) -> Unit,
+    private val onResult: (String, String, Boolean) -> Unit = { _, _, _ -> },
 ) {
     private var socket: WebSocket? = null
     private var client: OkHttpClient? = null
@@ -64,7 +65,7 @@ class RemoteTransport(
             "CustomX509TrustManager"
         ) // Self-signed identity uses a user-verified DER pin; TLS tests prove mismatched pins send
         // no secret.
-        fun pinnedClient(fingerprint: String): OkHttpClient {
+        fun pinnedClient(fingerprint: String, endpointHost: String? = null): OkHttpClient {
             val normalized = LocalEndpoint.normalizeFingerprint(fingerprint)
             val trust =
                 object : X509TrustManager {
@@ -105,10 +106,17 @@ class RemoteTransport(
                 .dns(
                     object : Dns {
                         override fun lookup(hostname: String) =
-                            listOf(LocalEndpoint.address(hostname))
+                            listOf(
+                                LocalEndpoint.address(
+                                    if (hostname == "bedside.invalid" && endpointHost != null)
+                                        endpointHost
+                                    else hostname
+                                )
+                            )
                     }
                 )
                 .followRedirects(false)
+                .proxy(java.net.Proxy.NO_PROXY)
                 .followSslRedirects(false)
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(5, TimeUnit.MINUTES)
@@ -130,7 +138,7 @@ class RemoteTransport(
             }
             val base = LocalEndpoint.baseUrl(host, port)
             val pin = LocalEndpoint.normalizeFingerprint(fingerprint)
-            val client = pinnedClient(pin)
+            val client = pinnedClient(pin, host)
             try {
                 val body =
                     WireJson.encodeToString(PairRequest(deviceName = deviceName, code = code))
@@ -192,6 +200,41 @@ class RemoteTransport(
         }
     }
 
+    suspend fun verifyEndpoint(target: PairedComputer) =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val http =
+                pinnedClient(target.fingerprint, target.host)
+                    .newBuilder()
+                    .callTimeout(10, TimeUnit.SECONDS)
+                    .build()
+            try {
+                http
+                    .newCall(
+                        Request.Builder()
+                            .url(LocalEndpoint.baseUrl(target.host, target.port) + "/health")
+                            .build()
+                    )
+                    .execute()
+                    .use { response ->
+                        require(response.isSuccessful) { "Computer is unavailable at this address" }
+                        val source = response.body?.source() ?: error("Empty computer response")
+                        source.request(4097)
+                        require(source.buffer.size <= 4096) { "Oversized computer response" }
+                        require(
+                            WireJson.parseToJsonElement(source.readUtf8())
+                                .jsonObject["version"]
+                                ?.jsonPrimitive
+                                ?.content == "1"
+                        ) {
+                            "Unsupported computer protocol"
+                        }
+                    }
+            } finally {
+                http.connectionPool.evictAll()
+                http.dispatcher.executorService.shutdown()
+            }
+        }
+
     @Synchronized
     fun connect(target: PairedComputer) {
         disconnect()
@@ -207,7 +250,7 @@ class RemoteTransport(
         onStatus(if (failures == 0) ConnectionStatus.CONNECTING else ConnectionStatus.RECONNECTING)
         try {
             val base = LocalEndpoint.baseUrl(target.host, target.port)
-            val http = pinnedClient(target.fingerprint)
+            val http = pinnedClient(target.fingerprint, target.host)
             client = http
             sequence = 0
             socket =
@@ -262,6 +305,7 @@ class RemoteTransport(
                                                                 ?: "Computer could not execute that action"
                                                         )
                                                     else onAccepted(accepted.action)
+                                                    onResult(ack.id, accepted.action, ack.ok)
                                                 }
                                             }
                                             else -> error("Unsupported agent message")
@@ -282,7 +326,7 @@ class RemoteTransport(
                         }
 
                         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                            lost(current, code == 1008)
+                            lost(current, false, code == 1002 || code == 1003)
                         }
 
                         override fun onFailure(
@@ -292,33 +336,41 @@ class RemoteTransport(
                         ) {
                             if (generation == current)
                                 onError(
-                                    if (response?.code == 401 || response?.code == 403)
+                                    if (response?.code == 401)
                                         "Device authorization expired or was revoked. Pair again on Windows."
                                     else
                                         "Connection lost. Check the computer, LAN and certificate fingerprint."
                                 )
-                            lost(current, response?.code == 401 || response?.code == 403)
+                            lost(current, response?.code == 401, response?.code == 403)
                             response?.close()
                         }
                     },
                 )
         } catch (error: Exception) {
             onError(error.message ?: "Connection failed")
-            lost(current, true)
+            lost(current, false, true)
         }
     }
 
     @Synchronized
-    private fun lost(current: Long, revoked: Boolean) {
+    private fun lost(current: Long, revoked: Boolean, terminal: Boolean = false) {
         if (current != generation) return
         connected = false
-        pending.values.forEach { it.timeout.cancel() }
+        pending.forEach { (id, item) ->
+            item.timeout.cancel()
+            onResult(id, item.action, false)
+        }
         pending.clear()
         client?.connectionPool?.evictAll()
         client?.dispatcher?.executorService?.shutdown()
         if (revoked) {
             computer = null
             onStatus(ConnectionStatus.REVOKED)
+            return
+        }
+        if (terminal) {
+            computer = null
+            onStatus(ConnectionStatus.DISCONNECTED)
             return
         }
         failures++
@@ -361,10 +413,12 @@ class RemoteTransport(
                     else 10000
                 )
                 synchronized(this@RemoteTransport) {
-                    if (pending.remove(id) != null)
+                    pending.remove(id)?.let { expired ->
+                        onResult(id, expired.action, false)
                         onError(
                             "Computer did not acknowledge the action. Check its state before retrying."
                         )
+                    }
                 }
             }
         pending[id] = PendingCommand(timeout, action)
@@ -377,7 +431,10 @@ class RemoteTransport(
         computer = null
         connected = false
         retry?.cancel()
-        pending.values.forEach { it.timeout.cancel() }
+        pending.forEach { (id, item) ->
+            item.timeout.cancel()
+            onResult(id, item.action, false)
+        }
         pending.clear()
         socket?.close(1000, "App inactive")
         socket = null

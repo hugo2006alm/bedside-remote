@@ -11,10 +11,13 @@ The local network and DNS-SD announcements are untrusted. A persistent self-sign
 - Use TLS for pairing and all control traffic. No cleartext fallback and no token in URL/query strings.
 - Authenticate WSS with a random per-device bearer token. Protect Windows persistent secrets with current-user DPAPI and Android secrets with Keystore-backed authenticated encryption. Do not log codes, tokens or private keys.
 - Enforce message size, schema, numeric ranges, known protocol version and per-connection increasing sequence numbers. TLS protects recorded transport traffic; commands are not automatically replayed after reconnect.
+- Exit cancels active input/browser work and aborts authenticated sockets before disposing the server. WebSocket pings every 20 seconds require a pong within 15 seconds.
 - Revocation rejects future access and terminates existing authenticated sockets. Changing/resetting the server certificate requires explicitly verifying its new fingerprint.
 - Restrict remote control to private/link-local/loopback addresses. Do not forward the port, enable UPnP or open a public firewall profile. Only allow the Windows executable on trusted private networks when Windows prompts.
 
 Native Messaging allows only the fixed extension ID. The bridge validates its invocation and uses a current-user-only named pipe; it is not an unauthenticated network bridge. This boundary does not defend against arbitrary malware already running as the same Windows user. Framed JSON has a bounded size; stdout carries protocol bytes only.
+
+Updating a saved Android endpoint checks its existing certificate pin using an unauthenticated `/health` request before saving. It never sends a bearer token to an unverified replacement address. Scoped IPv6 literals use a direct numeric DNS mapping; the synthetic URL host never reaches system DNS or a proxy. Credential-list reads, writes and UI publication are serialized so overlapping pairing/removal cannot restore forgotten credentials.
 
 ## Browser and input boundaries
 
@@ -30,7 +33,7 @@ See [releasing.md](releasing.md) for Android, Authenticode and Mozilla signing s
 
 ### Open development dependency advisory
 
-As of 2026-10-18, [GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv) affects `node-forge` 1.4.0 through `web-ext` → `@devicefarmer/adbkit`; no patched version is listed. The affected signature-verification call is in adbkit's TCP/USB authentication path. This project's web-ext usage is limited to lint/build/Mozilla signing, not its Android remote-debugging features; node-forge is not bundled into the shipped browser scripts. Leave the Dependabot alert open, review upstream fixes before the next release and avoid adding web-ext Android debugging while this remains unresolved. This assessment does not declare the dependency fixed.
+As of 2026-10-19, [GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv) affects `node-forge` 1.4.0 through `web-ext` → `@devicefarmer/adbkit`; no patched version is listed. The affected signature-verification call is in adbkit's TCP/USB authentication path. This project's web-ext usage is limited to lint/build/Mozilla signing, not its Android remote-debugging features; node-forge is not bundled into the shipped browser scripts. Leave the Dependabot alert open, review upstream fixes before the next release and avoid adding web-ext Android debugging while this remains unresolved. This assessment does not declare the dependency fixed.
 
 ## Verification boundaries
 

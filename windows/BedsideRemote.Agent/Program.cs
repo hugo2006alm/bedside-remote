@@ -15,8 +15,12 @@ public static class Program
     {
         if (NativeBridge.IsNativeInvocation(args)) return NativeBridge.RunHostAsync(args).GetAwaiter().GetResult();
         if (args.Length != 0) return 2;
-        using var mutex = new Mutex(true, "Local\\BedsideRemote-" + WindowsIdentity.GetCurrent().User!.Value, out var created);
-        if (!created) return 0;
+        var user = WindowsIdentity.GetCurrent().User!.Value;
+        using var activation = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\BedsideRemote-Activate-" + user);
+        using var mutex = new Mutex(true, "Local\\BedsideRemote-" + user, out var created);
+        if (!created) { activation.Set(); return 0; }
+        // This lightweight tray UI must also render reliably with remote sessions and GPU drivers.
+        System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         var application = new System.Windows.Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         try
         {
@@ -26,9 +30,13 @@ public static class Program
             var fingerprint = Convert.ToHexString(SHA256.HashData(certificate.RawData));
             using var cancellation = new CancellationTokenSource();
             var window = new MainWindow(storage, settings, server, fingerprint);
+            var activationWait = ThreadPool.RegisterWaitForSingleObject(activation, (_, _) => window.Dispatcher.BeginInvoke(window.OpenWindow), null, Timeout.Infinite, false);
             MdnsAdvertiser? discovery = null;
+            var started = false;
             window.Loaded += async (_, _) =>
             {
+                if (started) return;
+                started = true;
                 try
                 {
                     await server.StartAsync(settings.Port, certificate, cancellation.Token);
@@ -41,6 +49,7 @@ public static class Program
                     }
                     catch (Exception ex) when (ex is System.Net.Sockets.SocketException or InvalidOperationException) { window.SetStatus("Ready · automatic discovery unavailable; use a manual address", false); }
                 }
+                catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
                 catch (Exception ex) when (ex is IOException or InvalidOperationException or System.Net.Sockets.SocketException) { window.SetStatus("Could not start: " + ex.Message, true); }
             };
             window.ExitRequested += async (_, _) =>
@@ -48,7 +57,8 @@ public static class Program
                 cancellation.Cancel(); discovery?.Dispose();
                 await server.StopAsync(); application.Shutdown();
             };
-            application.Run(window);
+            try { application.Run(window); }
+            finally { activationWait.Unregister(null); }
             return 0;
         }
         catch (Exception ex) when (ex is IOException or CryptographicException or System.Text.Json.JsonException or System.ComponentModel.Win32Exception or FormatException)

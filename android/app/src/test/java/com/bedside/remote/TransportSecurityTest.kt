@@ -23,6 +23,164 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TransportSecurityTest {
+    @Test
+    fun transientCloseDoesNotRevokeValidPairing() {
+        for (code in listOf(1008, 1013)) {
+            server().use { server ->
+                val reconnecting = CountDownLatch(1)
+                val statuses =
+                    java.util.Collections.synchronizedList(mutableListOf<ConnectionStatus>())
+                server.enqueue(
+                    MockResponse()
+                        .withWebSocketUpgrade(
+                            object : WebSocketListener() {
+                                override fun onOpen(webSocket: WebSocket, response: Response) {
+                                    webSocket.close(code, "Retry later")
+                                }
+
+                                override fun onClosing(
+                                    webSocket: WebSocket,
+                                    code: Int,
+                                    reason: String,
+                                ) {
+                                    webSocket.close(code, reason)
+                                }
+                            }
+                        )
+                )
+                val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+                val transport =
+                    RemoteTransport(
+                        scope,
+                        {
+                            statuses.add(it)
+                            if (it == ConnectionStatus.RECONNECTING) reconnecting.countDown()
+                        },
+                        {},
+                        {},
+                        {},
+                    )
+                try {
+                    transport.connect(
+                        PairedComputer(
+                            "phone",
+                            "PC",
+                            "127.0.0.1",
+                            server.port,
+                            fingerprint,
+                            "test-token",
+                        )
+                    )
+                    assertTrue(reconnecting.await(5, TimeUnit.SECONDS))
+                    assertFalse(statuses.contains(ConnectionStatus.REVOKED))
+                } finally {
+                    transport.disconnect()
+                    scope.cancel()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun endpointEditVerifiesPinWithoutSendingStoredToken() = runBlocking {
+        server().use { server ->
+            server.enqueue(MockResponse().setBody("""{"version":1,"name":"PC"}"""))
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val transport = RemoteTransport(scope, {}, {}, {}, {})
+            try {
+                val computer =
+                    PairedComputer(
+                        "phone",
+                        "PC",
+                        "127.0.0.1",
+                        server.port,
+                        fingerprint,
+                        "private-token",
+                    )
+                transport.verifyEndpoint(computer)
+                val request = server.takeRequest(5, TimeUnit.SECONDS)!!
+                assertEquals("/health", request.path)
+                assertNull(request.getHeader("Authorization"))
+                assertTrue(
+                    runCatching {
+                            transport.verifyEndpoint(computer.copy(fingerprint = "00".repeat(32)))
+                        }
+                        .isFailure
+                )
+                assertEquals(1, server.requestCount)
+            } finally {
+                transport.disconnect()
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test
+    fun rejectedAcknowledgementReportsFailedDraftWithoutAcceptance() {
+        server().use { server ->
+            val opened = CountDownLatch(1)
+            val rejected = CountDownLatch(1)
+            var accepted = false
+            server.enqueue(
+                MockResponse()
+                    .withWebSocketUpgrade(
+                        object : WebSocketListener() {
+                            override fun onMessage(webSocket: WebSocket, text: String) {
+                                val id =
+                                    WireJson.parseToJsonElement(text)
+                                        .jsonObject["id"]!!
+                                        .jsonPrimitive
+                                        .content
+                                webSocket.send(
+                                    """{"version":1,"type":"ack","id":"$id","ok":false,"error":"Busy"}"""
+                                )
+                            }
+
+                            override fun onClosing(
+                                webSocket: WebSocket,
+                                code: Int,
+                                reason: String,
+                            ) {
+                                webSocket.close(code, reason)
+                            }
+                        }
+                    )
+            )
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val transport =
+                RemoteTransport(
+                    scope,
+                    { if (it == ConnectionStatus.CONNECTED) opened.countDown() },
+                    {},
+                    {},
+                    { accepted = true },
+                    { _, action, ok -> if (action == "input.text" && !ok) rejected.countDown() },
+                )
+            try {
+                transport.connect(
+                    PairedComputer(
+                        "phone",
+                        "PC",
+                        "127.0.0.1",
+                        server.port,
+                        fingerprint,
+                        "test-token",
+                    )
+                )
+                assertTrue(opened.await(5, TimeUnit.SECONDS))
+                transport.send(
+                    "input.text",
+                    JsonObject(mapOf("text" to JsonPrimitive("Keep this draft"))),
+                )
+                assertTrue(rejected.await(5, TimeUnit.SECONDS))
+                assertFalse(accepted)
+            } finally {
+                transport.disconnect()
+                scope.cancel()
+            }
+        }
+    }
+
     private val certificate =
         HeldCertificate.Builder()
             .commonName("Bedside test")

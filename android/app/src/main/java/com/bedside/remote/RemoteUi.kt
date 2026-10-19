@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -62,6 +63,7 @@ data class RemoteActions(
     val move: (String, Int) -> Unit = { _, _ -> },
     val select: (PairedComputer) -> Unit = {},
     val forget: (PairedComputer) -> Unit = {},
+    val updateEndpoint: (PairedComputer, String, String) -> Unit = { _, _, _ -> },
     val pair: (String, String, String, String, Boolean) -> Unit = { _, _, _, _, _ -> },
     val cancelPairing: () -> Unit = {},
     val haptics: (Boolean) -> Unit = {},
@@ -93,6 +95,7 @@ fun BedsideApp(state: AppState, model: RemoteViewModel) {
                     model.forget(it)
                     Unit
                 },
+                updateEndpoint = model::updateEndpoint,
                 pair = model::pair,
                 cancelPairing = model::cancelPairing,
                 haptics = model::haptics,
@@ -253,13 +256,16 @@ fun RemoteContent(
             }
         }
     }
-    if (keyboard) KeyboardDialog(state.connected, actions, onDismiss = { keyboard = false })
+    if (keyboard) KeyboardDialog(state, actions, onDismiss = { keyboard = false })
     if (settings) SettingsDialog(state, actions, onDismiss = { settings = false })
     if (state.sharedUrl != null && shareVisible) {
         VideoDialog(
             state.sharedUrl,
             state.connected,
             actions.enqueue,
+            pending = state.videoPending,
+            accepted = state.videoAccepted,
+            acceptedUrl = state.videoAcceptedUrl,
             error = state.error,
             onDismiss = { actions.dismissShare() },
             onDevices = {
@@ -487,7 +493,7 @@ private fun Control(
 }
 
 @Composable
-private fun PlaybackPanel(state: AppState, actions: RemoteActions) {
+internal fun PlaybackPanel(state: AppState, actions: RemoteActions) {
     val playback = state.remote.playback
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
@@ -507,12 +513,41 @@ private fun PlaybackPanel(state: AppState, actions: RemoteActions) {
                     color = MaterialTheme.colorScheme.primary,
                 )
         }
+        if (
+            state.remote.sessions.isNotEmpty() &&
+                (state.remote.sessions.size > 1 || state.remote.activeSessionId == null)
+        ) {
+            var expanded by remember { mutableStateOf(false) }
+            Box {
+                TextButton(onClick = { expanded = true }) {
+                    Icon(Icons.Rounded.Tab, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Choose browser tab")
+                }
+                DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
+                    state.remote.sessions.forEach { session ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    "${if (session.sessionId == state.remote.activeSessionId) "● " else ""}${session.title}",
+                                    maxLines = 2,
+                                )
+                            },
+                            onClick = {
+                                actions.session(session.sessionId)
+                                expanded = false
+                            },
+                        )
+                    }
+                }
+            }
+        }
         if (!state.remote.extensionConnected || playback == null) {
             Text(
                 if (!state.connected) "Connect to see your browser playback."
                 else if (!state.remote.extensionConnected)
-                    "Universal remote ready. Connect the Zen / Firefox extension for smart controls."
-                else "Open YouTube or Netflix in Zen / Firefox to see contextual controls.",
+                    "Universal remote ready. Connect a browser companion for smart controls."
+                else "Open YouTube in Zen / Firefox, or Netflix in the Edge Store app companion.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -560,32 +595,6 @@ private fun PlaybackPanel(state: AppState, actions: RemoteActions) {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                    }
-                }
-                if (state.remote.sessions.size > 1) {
-                    var expanded by remember { mutableStateOf(false) }
-                    Box {
-                        TextButton(onClick = { expanded = true }) {
-                            Icon(Icons.Rounded.Tab, null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Choose browser tab")
-                        }
-                        DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
-                            state.remote.sessions.forEach { session ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "${if (session.sessionId == state.remote.activeSessionId) "● " else ""}${session.title}",
-                                            maxLines = 2,
-                                        )
-                                    },
-                                    onClick = {
-                                        actions.session(session.sessionId)
-                                        expanded = false
-                                    },
-                                )
-                            }
-                        }
                     }
                 }
                 if (playback.duration > 0) {
@@ -976,6 +985,9 @@ private fun QueueScreen(state: AppState, actions: RemoteActions) {
             state.connected,
             actions.enqueue,
             onDismiss = { add = false },
+            pending = state.videoPending,
+            accepted = state.videoAccepted,
+            acceptedUrl = state.videoAcceptedUrl,
             error = state.error,
         )
     if (clear)
@@ -1000,6 +1012,7 @@ private fun DevicesScreen(state: AppState, actions: RemoteActions) {
     var add by rememberSaveable { mutableStateOf(false) }
     var discovered by remember { mutableStateOf<DiscoveredComputer?>(null) }
     var forget by remember { mutableStateOf<PairedComputer?>(null) }
+    var editing by remember { mutableStateOf<PairedComputer?>(null) }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -1033,6 +1046,7 @@ private fun DevicesScreen(state: AppState, actions: RemoteActions) {
                             style = MaterialTheme.typography.bodySmall,
                         )
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton({ editing = computer }) { Text("Edit address") }
                         TextButton({ forget = computer }) { Text("Forget") }
                         FilledTonalButton({ actions.select(computer) }) {
                             Text(
@@ -1113,6 +1127,19 @@ private fun DevicesScreen(state: AppState, actions: RemoteActions) {
     LaunchedEffect(state.pairing, state.notice) {
         if (!state.pairing && state.notice == "Computer paired securely") add = false
     }
+    editing?.let { computer ->
+        EndpointDialog(computer, state.endpointSaving, state.error, actions.updateEndpoint) {
+            editing = null
+        }
+    }
+    LaunchedEffect(state.endpointSaving, state.computers) {
+        if (
+            !state.endpointSaving &&
+                editing != null &&
+                state.computers.firstOrNull { it.deviceId == editing?.deviceId } != editing
+        )
+            editing = null
+    }
     forget?.let { computer ->
         AlertDialog(
             onDismissRequest = { forget = null },
@@ -1136,7 +1163,56 @@ private fun DevicesScreen(state: AppState, actions: RemoteActions) {
 }
 
 @Composable
-private fun PairDialog(
+private fun EndpointDialog(
+    computer: PairedComputer,
+    saving: Boolean,
+    error: String?,
+    onSave: (PairedComputer, String, String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var host by rememberSaveable(computer.deviceId) { mutableStateOf(computer.host) }
+    var port by rememberSaveable(computer.deviceId) { mutableStateOf(computer.port.toString()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Update computer address") },
+        text = {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    "Use the address shown in Windows. Its saved certificate is checked before saving; pairing stays intact."
+                )
+                OutlinedTextField(
+                    host,
+                    { host = it },
+                    label = { Text("Computer IP address") },
+                    enabled = !saving,
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    port,
+                    { port = it },
+                    label = { Text("Port") },
+                    enabled = !saving,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                if (saving) LinearProgressIndicator(Modifier.fillMaxWidth())
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            TextButton({ onSave(computer, host, port) }, enabled = !saving && host.isNotBlank()) {
+                Text("Verify and save")
+            }
+        },
+        dismissButton = { TextButton(onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+internal fun PairDialog(
     pairing: Boolean,
     error: String?,
     discovered: DiscoveredComputer?,
@@ -1191,8 +1267,16 @@ private fun PairDialog(
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(verified, { verified = it }, enabled = !pairing)
+                Row(
+                    Modifier.toggleable(
+                        value = verified,
+                        enabled = !pairing,
+                        role = Role.Checkbox,
+                        onValueChange = { verified = it },
+                    ),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(verified, null, enabled = !pairing)
                     Text(
                         "I compared all 64 fingerprint digits with Windows",
                         style = MaterialTheme.typography.bodySmall,
@@ -1235,8 +1319,11 @@ private fun PairDialog(
 }
 
 @Composable
-private fun KeyboardDialog(connected: Boolean, actions: RemoteActions, onDismiss: () -> Unit) {
-    var value by remember { mutableStateOf("") }
+internal fun KeyboardDialog(state: AppState, actions: RemoteActions, onDismiss: () -> Unit) {
+    var value by rememberSaveable { mutableStateOf("") }
+    val acceptedAtOpen = remember { state.textAccepted }
+    LaunchedEffect(state.textAccepted) { if (state.textAccepted != acceptedAtOpen) value = "" }
+    val connected = state.connected && !state.textPending
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Say it with keys.") },
@@ -1270,14 +1357,8 @@ private fun KeyboardDialog(connected: Boolean, actions: RemoteActions, onDismiss
             }
         },
         confirmButton = {
-            TextButton(
-                {
-                    actions.text(value)
-                    value = ""
-                },
-                enabled = connected && value.isNotBlank(),
-            ) {
-                Text("Send text")
+            TextButton({ actions.text(value) }, enabled = connected && value.isNotBlank()) {
+                Text(if (state.textPending) "Sending…" else "Send text")
             }
         },
         dismissButton = { TextButton(onDismiss) { Text("Done") } },
@@ -1292,8 +1373,16 @@ private fun VideoDialog(
     onDismiss: () -> Unit,
     onDevices: (() -> Unit)? = null,
     error: String? = null,
+    pending: Boolean = false,
+    accepted: Long = 0,
+    acceptedUrl: String? = null,
 ) {
-    var url by remember(initialUrl) { mutableStateOf(initialUrl) }
+    val acceptedAtOpen = remember { accepted }
+    var submitted by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(accepted) {
+        if (accepted != acceptedAtOpen && submitted != null && submitted == acceptedUrl) onDismiss()
+    }
+    var url by rememberSaveable(initialUrl) { mutableStateOf(initialUrl) }
     val valid = YoutubeLinks.canonical(url) != null
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1307,11 +1396,13 @@ private fun VideoDialog(
                     url,
                     { url = it },
                     label = { Text("YouTube video link") },
+                    enabled = !pending,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                     isError = url.isNotBlank() && !valid,
                     supportingText = { Text("Official HTTPS YouTube video links only") },
                 )
+                if (pending) LinearProgressIndicator(Modifier.fillMaxWidth())
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (!connected) {
                     Text("Connect to your computer before sending this video.")
@@ -1321,11 +1412,11 @@ private fun VideoDialog(
                     .forEach { (mode, label) ->
                         Button(
                             {
+                                submitted = YoutubeLinks.canonical(url)
                                 enqueue(url, mode)
-                                if (initialUrl.isEmpty()) onDismiss()
                             },
                             Modifier.fillMaxWidth(),
-                            enabled = connected && valid,
+                            enabled = connected && valid && !pending,
                         ) {
                             Text(label)
                         }

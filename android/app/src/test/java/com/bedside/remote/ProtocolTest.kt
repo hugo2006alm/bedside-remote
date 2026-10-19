@@ -2,6 +2,7 @@ package com.bedside.remote
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -78,6 +79,17 @@ class ProtocolTest {
         assertTrue(runCatching { LocalEndpoint.normalizeFingerprint("ab") }.isFailure)
         assertTrue(runCatching { LocalEndpoint.baseUrl("10.0.0.2", 0) }.isFailure)
         assertEquals("https://[fd12::1]:8765", LocalEndpoint.baseUrl("fd12::1", 8765))
+        val scoped = "fe80::1%1"
+        val url = LocalEndpoint.baseUrl(scoped, 8765)
+        assertNotNull(url.toHttpUrl())
+        val client = RemoteTransport.pinnedClient(pin, scoped)
+        try {
+            val address = client.dns.lookup("bedside.invalid").single() as java.net.Inet6Address
+            assertEquals(1, address.scopeId)
+            assertEquals(java.net.Proxy.NO_PROXY, client.proxy)
+        } finally {
+            client.dispatcher.executorService.shutdown()
+        }
     }
 
     @Test

@@ -35,6 +35,8 @@ For these items, “planned” refers to investigation, not a delivery commitmen
 
 ## Maintenance
 
+- **P1 — open development dependency advisory:** update the pinned web-ext dependency when upstream supplies a compatible node-forge fix; dependencies: upstream patched release; acceptance: advisory absent and lint/package/signing checks pass; status: planned. [Current assessment](security.md#open-development-dependency-advisory).
+
 - **Relative future-work priorities:** P1 high, P2 medium, P3 low. None blocks the first release.
 - **Allowed statuses:** planned, in development, completed, discarded.
 - Record newly identified work outside the MVP immediately. Keep unresolved dependencies explicit and acceptance criteria only as detailed as currently justified.

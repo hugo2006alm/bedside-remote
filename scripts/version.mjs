@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-const pattern = /^v?(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta)\.(\d+))?$/;
+const pattern = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(alpha|beta)\.(0|[1-9]\d*))?$/;
 
 export function parseVersion(value) {
   const match = pattern.exec(value);
@@ -40,13 +40,24 @@ export function calculateRelease(tags, messages, channel = 'alpha', force = fals
   return { publish: true, version, previous: latest?.tag ?? '' };
 }
 
+// AMO versions cannot be replaced. A failed publication can consume a version before a Git tag exists.
+export function overrideRelease(result, requested) {
+  if (!requested) return result;
+  const next = parseVersion(requested);
+  const previous = parseVersion(result.previous);
+  const calculated = parseVersion(result.version);
+  if (!next || requested.startsWith('v') || (previous && compareVersions(next, previous) <= 0) || compareVersions(next, calculated) < 0)
+    throw new Error('Release override must be a valid, unprefixed version at least as high as the calculated version and newer than the published tag.');
+  return { ...result, version: requested, publish: true };
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
   const tags = git('tag', '--merged', 'HEAD', '--list', 'v*').split('\n').filter(Boolean);
   const latest = tags.map(parseVersion).filter(Boolean).sort(compareVersions).at(-1);
   const range = latest ? `${latest.tag}..HEAD` : 'HEAD';
   const messages = git('log', range, '--format=%s%n%b%x00').split('\0').map(s => s.trim()).filter(Boolean);
-  const result = calculateRelease(tags, messages, process.env.RELEASE_CHANNEL || 'alpha', process.env.FORCE_RELEASE === 'true');
+  const result = overrideRelease(calculateRelease(tags, messages, process.env.RELEASE_CHANNEL || 'alpha', process.env.FORCE_RELEASE === 'true'), process.env.RELEASE_VERSION);
   const output = Object.entries(result).map(([key, value]) => `${key}=${value}`).join('\n') + '\n';
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, output);
   process.stdout.write(output);
