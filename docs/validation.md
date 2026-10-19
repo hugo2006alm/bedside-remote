@@ -62,6 +62,14 @@ The user confirmed a lasting Edge native connection after running the repair scr
 
 ## Physical acceptance checklist
 
+### Remote usability update, 2026-10-19
+
+Windows navigation now ranks accessible foreground controls spatially and focuses/selects them; it does not translate failed selection into scrolling. Android's grid button opens the authenticated fixed media-app catalog. Trackpad gestures cover double-tap-hold dragging/selection, two-finger right-click and the requested Windows scroll direction. Drag ownership, connection cancellation and inactivity expiry have simulated-input regression coverage. A two-server Android test verifies that switching PCs sends an app-launch command only to the currently connected socket. The fingerprint probe reads a certificate without sending an HTTP request, pairing code or token; full pin comparison and Windows approval remain mandatory.
+
+These new paths have automated coverage, not physical acceptance on the second PC. Netflix title spacing was confirmed by the user; menu confirmation/closing still fails live and further Edge/Netflix testing was explicitly deferred by the user. Invalidated extension contexts now stop polling, detach media handlers and catch synchronous pagehide failures; three regression cases cover those paths.
+
+Local checks pass 99 Windows core checks, 77 isolated transport/input/launcher integration checks, 24 Android unit/TLS/WSS/gesture tests and 29 browser tests. Android lint and debug/instrumentation APK compilation pass. Eight Compose cases compile; execution remains a CI requirement. Launcher tests replace process creation, and input tests replace native injection. No new physical gesture, UI Automation or app-launch success is inferred.
+
 On 2026-10-19 the user confirmed that updating the actual Edge extension directory in Documents restored the Netflix episode player and title in both extension and Android. Earlier local copies in another directory were not the loaded extension. Home preview pause control was also observed. The user reported that episode audio/subtitle actions opened the shared menu but returned a false failure, did not close it and appeared as duplicate Android buttons. Nested title spacing, shared-menu open/close confirmation and a single Android control now have regression coverage; their real follow-up remains pending. Local validation passed 26 browser tests and Mozilla lint with no warnings, Android lint/16 unit tests/APK and instrumentation APK compilation, and 92 Windows core/68 isolated integration checks for the navigation changes. The new Compose cases still require execution in CI. No real episode seek, episode transition, full D-pad browse or menu-selection success is inferred from these observations.
 
 The observations above are partial physical evidence. The following checklist remains open until all relevant cases are executed and recorded with device/browser versions:

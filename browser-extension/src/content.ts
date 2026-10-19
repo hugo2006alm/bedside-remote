@@ -15,6 +15,8 @@ if (adapter) {
   let lastSent = 0;
   let busy = false;
   let stopped = false;
+  let invalidated = false;
+  let timer: ReturnType<typeof setInterval> | undefined;
   const instance = crypto.randomUUID();
   const naturalEnd = (event: Event) => {
     if (!event.isTrusted || !observedVideo?.ended || identity !== location.href || observedVideo !== adapter.video() ||
@@ -24,6 +26,21 @@ if (adapter) {
   };
   const resumed = () => { ended = false; error = undefined; void publish(true); };
   const reset = () => { ended = false; void publish(true); };
+  function stop() {
+    stopped = true;
+    clearInterval(timer);
+    observedVideo?.removeEventListener('ended', naturalEnd);
+    observedVideo?.removeEventListener('playing', resumed);
+    observedVideo?.removeEventListener('seeking', reset);
+    observedVideo = null;
+  }
+  function messagingFailed(cause: unknown) {
+    lastState = '';
+    if (cause instanceof Error && /extension context invalidated/i.test(cause.message)) {
+      invalidated = true;
+      stop();
+    }
+  }
   async function publish(force = false) {
     if (stopped) return;
     if (identity !== location.href) { identity = location.href; ended = false; error = undefined; }
@@ -47,7 +64,7 @@ if (adapter) {
       const result: unknown = await browser.runtime.sendMessage({ type: 'player.state', instance, state });
       if (object(result) && result.ok === false) lastState = '';
     }
-    catch { /* Extension reload or sleeping background: next poll retries. */ lastState = ''; }
+    catch (cause) { messagingFailed(cause); }
   }
   listen((message: unknown) => {
     if (object(message) && message.type === 'player.identity' && onlyKeys(message, ['type'])) {
@@ -74,16 +91,18 @@ if (adapter) {
       } finally { busy = false; await publish(true); }
     })();
   });
-  let timer = setInterval(() => { void publish(); }, 1000);
+  timer = setInterval(() => { void publish(); }, 1000);
   // No DOM-wide mutation observer: streaming pages change constantly. The one-second
   // sampler discovers SPA navigation, replacement video elements and contextual controls.
   window.addEventListener('pagehide', () => {
-    stopped = true;
-    clearInterval(timer);
-    void browser.runtime.sendMessage({ type: 'player.gone', instance }).catch(() => {});
+    stop();
+    if (invalidated) return;
+    try {
+      void Promise.resolve(browser.runtime.sendMessage({ type: 'player.gone', instance })).catch(messagingFailed);
+    } catch (cause) { messagingFailed(cause); }
   });
   window.addEventListener('pageshow', event => {
-    if (event.persisted) {
+    if (event.persisted && !invalidated) {
       stopped = false;
       timer = setInterval(() => { void publish(); }, 1000);
       void publish(true);

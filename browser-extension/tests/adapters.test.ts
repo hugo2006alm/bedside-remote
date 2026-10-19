@@ -157,8 +157,8 @@ test('an unrelated open dialog cannot falsely confirm the Netflix audio menu', a
   const dialog = dom.window.document.createElement('div'); dialog.setAttribute('role', 'dialog');
   Object.defineProperty(dialog, 'getClientRects', { value: () => [{ width: 200, height: 200 }] });
   dom.window.document.body.append(dialog);
-  await assert.rejects(adapter.execute('audio'), /did not confirm/);
+  await assert.rejects(adapter.execute('audio'), /not confirmed.*control-audio-subtitle/);
   dom.window.document.querySelector('[data-uia="control-audio-subtitle"]')!.setAttribute('aria-expanded', 'true');
-  await assert.rejects(adapter.execute('audio'), /did not confirm/, 'an unchanged expanded flag cannot falsely confirm closing');
+  await assert.rejects(adapter.execute('audio'), /not confirmed/, 'an unchanged expanded flag cannot falsely confirm closing');
   dom.window.close();
 });

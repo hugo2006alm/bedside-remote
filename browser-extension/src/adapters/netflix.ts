@@ -74,6 +74,12 @@ export class NetflixAdapter extends DomAdapter {
       current.closest('.audio-subtitle-controller, [data-uia="audio-subtitle-controller"]')?.dispatchEvent(new Mouse('mouseleave', { relatedTarget: destination }));
       if (await this.waitForMenu(current, wasOpen, !!menu, expanded, 1000)) return;
     }
-    throw new Error('The player did not confirm the audio and subtitles menu change.');
+    const markers = Array.from(this.doc.querySelectorAll<HTMLElement>('[data-uia*="audio"], [data-uia*="subtitle"], [role="menu"], [role="listbox"]'))
+      .filter(visible)
+      .map(element => element.getAttribute('data-uia') || element.getAttribute('role') || '')
+      .filter(marker => /^[a-zA-Z0-9_-]{1,64}$/.test(marker));
+    const diagnostic = [...new Set(markers)].slice(0, 6).join(', ').slice(0, 155);
+    // Only public control identifiers: never titles, chosen languages or page content.
+    throw new Error(`Audio/subtitles menu change was not confirmed. Visible controls: ${diagnostic || 'none'}.`);
   }
 }

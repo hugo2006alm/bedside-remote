@@ -5,11 +5,12 @@ This file is the shared implementation contract. All components must follow thes
 ## Network and pairing
 
 - Windows advertises `_bedside-remote._tcp` using DNS-SD/mDNS. Default HTTPS port: 8765. TXT `version=1`. Discovery supplies an address, never trust.
-- Windows owns a persistent self-signed TLS certificate. Its SHA-256 DER fingerprint (64 hex digits) is shown on the Windows pairing screen. Android requires the user to enter/verify that fingerprint from Windows before sending any pairing secret. Pin matching is mandatory for both HTTPS and WSS; do not install a trust-all fallback.
+- Windows owns a persistent self-signed TLS certificate. Its SHA-256 DER fingerprint (64 hex digits) is shown on the Windows pairing screen. Android may read an untrusted candidate through a TLS-only probe to the numeric LAN address; that probe sends no HTTP request or secret and is isolated from authenticated clients. The user must compare the displayed full fingerprint with Windows before sending the pairing code. Pin matching is mandatory for both HTTPS and WSS; no trust-all authenticated fallback is permitted.
 - Windows opens a five-minute pairing window showing a cryptographically random six-digit code. `POST /pair` accepts `{version:1,deviceName:string,code:string}` only during this window. Rate-limit attempts. Windows must explicitly approve each new device in its local UI.
 - Response: `{version:1,deviceId:string,token:string,deviceName:string}`. Token is random 256-bit, stored with Windows DPAPI and Android Keystore encryption. Fingerprint/address are retained per computer.
 - `GET /ws` upgrades to WSS with `Authorization: Bearer <token>`. Reject browser Origin headers, public remote addresses, invalid/revoked tokens and oversized messages (64 KiB). No credentials in URLs or logs. Close active connections on revocation and agent exit. Ping every 20 seconds, with a 15-second pong deadline. A rate-limit close uses 1013 (retry later), not a revocation signal. Only HTTP 401 during authentication establishes revoked/invalid credentials; a legacy 1008 close is retryable.
 - `GET /health` returns only `{version:1,name:string}`. No control is possible without authentication. LAN includes RFC1918 IPv4, loopback, IPv6 link-local and ULA only.
+- Optional `GET /apps` requires the same bearer authentication and pinned TLS as WSS. It returns `{version:1,controls:["drag","desktopNavigation"],apps:[{appId,name,kind:"app"|"browser"}]}`. The fixed IDs are `youtube`, `netflix`, `spotify`, `stremio`, `vlc`; the catalog contains no executable paths. Older agents may return 404. This separate endpoint preserves the strict v1 state shape; Android sends new input/launch actions only when advertised.
 
 ## Android to Windows
 
@@ -26,6 +27,9 @@ Android retains text/link drafts until a successful acknowledgement, clears pend
 | `input.pointer` | `{dx:number,dy:number}`; finite, each between -1000 and 1000. |
 | `input.click` | `{button:"left"|"right"}` |
 | `input.scroll` | `{delta:integer}`; -1200..1200, Windows wheel units. |
+| `input.navigate` | `{key:"up"|"down"|"left"|"right"|"enter"|"escape"}`; spatially select visible accessible controls in the foreground Windows application, then activate with Enter. No scroll fallback; unsupported apps require touchpad. |
+| `input.drag` | `{phase:"start"|"move"|"end",dx:number,dy:number}`; finite deltas -1000..1000. Hold left button for this authenticated connection only. Renew at least every 500 ms while held; release on end, disconnect, foreground change or 2-second inactivity. |
+| `app.launch` | `{appId:"youtube"|"netflix"|"spotify"|"stremio"|"vlc"}`; agent resolves only its own fixed destinations and detected installations. Reject unavailable apps, arbitrary paths, arguments and URLs. |
 | `media.command` | `{command:"playPause"|"next"|"previous"|"volumeUp"|"volumeDown"|"mute"|"seekForward"|"seekBackward"}` |
 | `browser.command` | `{command:"playPause"|"seek"|"skipIntro"|"skipRecap"|"nextEpisode"|"fullscreen"|"subtitles"|"audio",position?:number}`; `seek` requires finite nonnegative seconds. |
 | `browser.select` | `{sessionId:string}`; must exist in current state. |

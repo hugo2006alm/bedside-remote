@@ -13,7 +13,7 @@ Release builds accept `-PversionName=X.Y.Z -PversionCode=N`. Set `ANDROID_KEYSTO
 
 ## Use
 
-Open the Windows pairing window, then choose a discovered computer or enter its numeric private IP address and port. Enter the complete SHA-256 fingerprint shown on Windows, compare every digit, enter the six-digit code, and approve the phone on Windows. Discovery does not establish trust. Tokens and computer details are encrypted with an Android Keystore AES-GCM key; backups are disabled.
+Open the Windows pairing window, then choose a discovered computer or enter its numeric private IP address and port. Android reads the complete SHA-256 fingerprint through an isolated TLS-only probe and displays grouped digits automatically. Compare them with Windows, confirm the checkbox, enter the six-digit code and approve the phone on Windows. Discovery and the initial certificate probe do not establish trust; subsequent requests pin that full certificate. Tokens and computer details are encrypted with an Android Keystore AES-GCM key; backups are disabled.
 
 Discovery considers all resolved addresses on Android 14 and later, with optional bounded Windows TXT hints for earlier Android versions. It rejects public, CGNAT and loopback discovery addresses and prefers an address on one of the phone's local subnets. A discovered address still requires the complete certificate fingerprint and Windows approval.
 

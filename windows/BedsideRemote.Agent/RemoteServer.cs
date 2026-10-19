@@ -61,6 +61,14 @@ public sealed class RemoteServer
         });
         app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(20), KeepAliveTimeout = TimeSpan.FromSeconds(15) });
         app.MapGet("/health", () => new { version = 1, name = Environment.MachineName });
+        app.MapGet("/apps", async context =>
+        {
+            var authorization = context.Request.Headers.Authorization.ToString();
+            lock (deviceLock)
+                if (!authorization.StartsWith("Bearer ", StringComparison.Ordinal) || !devices.Any(device => PairingWindow.Matches(device, authorization[7..])))
+                { context.Response.StatusCode = 401; return; }
+            await context.Response.WriteAsJsonAsync(new { version = 1, controls = new[] { "drag", "desktopNavigation" }, apps = engine.Apps.List() }, Protocol.Json, context.RequestAborted);
+        });
         app.MapPost("/pair", PairAsync);
         app.MapGet("/ws", ConnectAsync);
         await app.StartAsync(token);

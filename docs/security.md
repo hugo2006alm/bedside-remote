@@ -21,6 +21,10 @@ Updating a saved Android endpoint checks its existing certificate pin using an u
 
 ## Browser and input boundaries
 
+Fingerprint autofill uses an isolated TLS handshake to the numeric LAN endpoint. It sends no HTTP request, code or bearer token; the result is explicitly untrusted until compared with Windows. All subsequent pairing and control requests still require the complete verified DER pin. Changing the endpoint clears confirmation.
+
+Drag holds belong to one authenticated socket, expire after two seconds without renewal and release on cancellation or foreground change. Another connection cannot move or release that hold. The optional app catalog is authenticated; launch commands contain only fixed app IDs, never remote-supplied executable paths, arguments or URLs. Installed paths are resolved locally. Global media keys are delivered on the connected PC; an application such as Spotify may relay them through its own Connect session to another device, independently of Bedside pairing.
+
 Extension permissions are restricted to supported YouTube/Netflix domains plus required extension APIs. Streaming adapter logic reads necessary playback state and semantic controls only, never cookies, Google/Netflix credentials, private catalogs or DRM material. Site DOM changes can make controls unavailable; fall back to universal input and report the limitation.
 
 YouTube URLs require HTTPS, exact official hosts, an accepted path and a valid video ID. Reject embedded credentials, spoofed hosts and unexpected ports. The agent independently validates incoming links and commands rather than trusting Android or extension validation alone.

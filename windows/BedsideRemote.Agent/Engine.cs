@@ -7,6 +7,7 @@ public sealed class Engine
 {
     private readonly object sync = new();
     private readonly Storage storage;
+    public MediaApps Apps { get; } = new();
     private readonly Func<Command, CancellationToken, Task> desktopInput;
     private static readonly SemaphoreSlim DesktopSync = new(1);
     private readonly SemaphoreSlim browserCommands = new(1);
@@ -138,6 +139,7 @@ public sealed class Engine
     public async Task ExecuteAsync(Command command, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
+        if (command.Action == "app.launch") { Apps.Launch(command.Payload.GetProperty("appId").GetString()!); return; }
         if (IsImmediate(command))
         {
             if (!DesktopSync.Wait(0)) throw new InvalidOperationException("Desktop input is busy. Wait for it to finish; this action was not queued.");

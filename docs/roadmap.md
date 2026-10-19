@@ -16,6 +16,7 @@ Required sensitivity adjustments and basic interaction feedback do not depend on
 
 | Feature | Priority | Dependencies | Acceptance criteria | Status |
 | --- | --- | --- | --- | --- |
+| Approved media launcher from the remote's grid button. | P1 | Authenticated agent catalog; fixed app identities and official web destinations. | Open YouTube and Netflix; show installed Spotify, Stremio and VLC where detected; reject arbitrary paths/URLs and preserve per-PC targeting. | Completed in [PR #12](https://github.com/hugo2006alm/bedside-remote/pull/12); simulated launch, protocol/authentication and two-PC targeting checks pass; physical launch acceptance pending. |
 | Wake-on-LAN from Android. | P1 | Saved network details; compatible hardware, firmware, Windows and network. | Send a magic packet; wake only from verified supported states; document configuration and limits. | Planned |
 | Power management: lock, suspend, shut down and restart. | P2 | Authenticated connection, authorized agent actions and disconnect handling. | Execute allowed actions only; confirm destructive actions; reflect disconnection/recovery. | Planned |
 | Advanced customization: favorites, quick actions and sensitivity/behavior/haptic preferences. | P2 | Stable core controls, persisted settings and an allowed-action policy. | Persist preferences across sessions; restore defaults; execute authorized shortcuts only. | Planned |

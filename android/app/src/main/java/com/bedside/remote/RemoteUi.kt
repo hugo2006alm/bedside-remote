@@ -48,11 +48,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import java.net.URI
-import kotlin.math.abs
 
 data class RemoteActions(
     val key: (String) -> Unit = {},
     val navigate: (String) -> Unit = key,
+    val desktopNavigate: (String) -> Unit = key,
+    val launchApp: (String) -> Unit = {},
+    val drag: (String, Float, Float) -> Unit = { _, _, _ -> },
     val media: (String) -> Unit = {},
     val browser: (String, Double?) -> Unit = { _, _ -> },
     val session: (String) -> Unit = {},
@@ -83,6 +85,9 @@ fun BedsideApp(state: AppState, model: RemoteViewModel) {
             RemoteActions(
                 key = model::key,
                 navigate = model::navigate,
+                desktopNavigate = model::desktopNavigate,
+                launchApp = model::launchApp,
+                drag = model::drag,
                 media = model::media,
                 browser = model::browser,
                 session = model::session,
@@ -303,6 +308,7 @@ private fun statusLabel(status: ConnectionStatus) =
 @Composable
 private fun RemoteScreen(state: AppState, actions: RemoteActions, onKeyboard: () -> Unit) {
     var browserNavigation by rememberSaveable { mutableStateOf(true) }
+    var appsVisible by rememberSaveable { mutableStateOf(false) }
     val browserTarget = browserNavigation && state.remote.activeSessionId != null
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
@@ -341,14 +347,12 @@ private fun RemoteScreen(state: AppState, actions: RemoteActions, onKeyboard: ()
                 )
             }
         }
-        DPad(state.connected, if (browserTarget) actions.navigate else actions.key)
+        DPad(state.connected, if (browserTarget) actions.navigate else actions.desktopNavigate)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             Control(Icons.AutoMirrored.Rounded.ArrowBack, "Back / Escape", state.connected) {
                 actions.key("escape")
             }
-            Control(Icons.Rounded.Window, "Windows Start menu", state.connected) {
-                actions.key("home")
-            }
+            Control(Icons.Rounded.Apps, "Open media apps", state.connected) { appsVisible = true }
             Control(Icons.Rounded.Keyboard, "Open keyboard", state.connected, onClick = onKeyboard)
         }
         Surface(
@@ -418,6 +422,44 @@ private fun RemoteScreen(state: AppState, actions: RemoteActions, onKeyboard: ()
         PlaybackPanel(state, actions)
         Spacer(Modifier.height(8.dp))
     }
+    if (appsVisible) MediaAppsDialog(state, actions) { appsVisible = false }
+}
+
+@Composable
+private fun MediaAppsDialog(state: AppState, actions: RemoteActions, dismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = dismiss,
+        title = { Text("Open on your PC") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (state.catalog.apps.isEmpty())
+                    Text("Update the Windows agent and reconnect to load its media apps.")
+                state.catalog.apps.forEach { app ->
+                    OutlinedButton(
+                        onClick = {
+                            actions.launchApp(app.appId)
+                            dismiss()
+                        },
+                        enabled = state.connected,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(
+                            if (app.appId == "spotify") Icons.Rounded.MusicNote
+                            else Icons.Rounded.PlayCircle,
+                            null,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(app.name, modifier = Modifier.weight(1f))
+                        Text(
+                            if (app.kind == "browser") "Browser" else "App",
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(dismiss) { Text("Close") } },
+    )
 }
 
 @Composable
@@ -764,13 +806,22 @@ private fun timeLabel(seconds: Double): String {
 
 @Composable
 private fun TouchScreen(state: AppState, actions: RemoteActions, onKeyboard: () -> Unit) {
+    var dragHeld by remember { mutableStateOf(false) }
+    val currentActions by rememberUpdatedState(actions)
+    LaunchedEffect(dragHeld, state.connected) {
+        if (dragHeld && state.connected)
+            while (true) {
+                kotlinx.coroutines.delay(500)
+                currentActions.drag("move", 0f, 0f)
+            }
+    }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         Text("A lighter touch.", style = MaterialTheme.typography.headlineMedium)
         Text(
-            "Slide to move · tap to click\nTwo fingers to scroll · hold for right click",
+            "Slide to move · tap to click\nDouble-tap and hold to drag or select\nTwo-finger tap for right click · two fingers to scroll",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Box(
@@ -780,7 +831,7 @@ private fun TouchScreen(state: AppState, actions: RemoteActions, onKeyboard: () 
                 .background(MaterialTheme.colorScheme.surface)
                 .semantics {
                     contentDescription =
-                        "Computer trackpad. Slide one finger to move; use two fingers to scroll."
+                        "Computer trackpad. Slide to move, double-tap and hold to drag, tap two fingers for right click, slide two fingers to scroll."
                     customActions =
                         listOf(
                             CustomAccessibilityAction("Left click") {
@@ -809,40 +860,57 @@ private fun TouchScreen(state: AppState, actions: RemoteActions, onKeyboard: () 
                             },
                         )
                 }
-                .pointerInput(state.connected, state.sensitivity) {
+                .pointerInput(
+                    state.connected,
+                    state.sensitivity,
+                    state.catalog.controls,
+                    state.dragRejected,
+                ) {
                     if (!state.connected) return@pointerInput
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        var distance = 0f
-                        var twoFingers = false
-                        var scrollRemainder = 0f
-                        do {
-                            val event = awaitPointerEvent()
-                            val pressed = event.changes.filter { it.pressed }
-                            twoFingers = twoFingers || pressed.size > 1
-                            val delta =
-                                event.changes
-                                    .map { it.positionChange() }
-                                    .fold(Offset.Zero) { acc, offset -> acc + offset } /
-                                    event.changes.size.toFloat()
-                            distance += abs(delta.x) + abs(delta.y)
-                            if (pressed.size > 1) {
-                                scrollRemainder -= delta.y * 4
-                                val steps = scrollRemainder.toInt()
-                                if (steps != 0) {
-                                    actions.scroll(steps)
-                                    scrollRemainder -= steps
-                                }
-                            } else if (!twoFingers && pressed.isNotEmpty() && delta != Offset.Zero)
-                                actions.pointer(delta.x, delta.y)
-                            event.changes.forEach { it.consume() }
-                            if (pressed.isEmpty() && distance < viewConfiguration.touchSlop)
-                                actions.click(
-                                    twoFingers ||
-                                        event.changes.first().uptimeMillis - down.uptimeMillis >
-                                            viewConfiguration.longPressTimeoutMillis
-                                )
-                        } while (event.changes.any { it.pressed })
+                    val gesture =
+                        TrackpadGesture(
+                            viewConfiguration.touchSlop,
+                            viewConfiguration.doubleTapTimeoutMillis,
+                            viewConfiguration.longPressTimeoutMillis,
+                            "drag" in state.catalog.controls,
+                        ) { action ->
+                            when (action) {
+                                is TrackpadAction.Move ->
+                                    currentActions.pointer(action.dx, action.dy)
+                                is TrackpadAction.Scroll -> currentActions.scroll(action.delta)
+                                is TrackpadAction.Click -> currentActions.click(action.right)
+                                is TrackpadAction.Drag ->
+                                    currentActions.drag(action.phase, action.dx, action.dy)
+                            }
+                        }
+                    try {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            down.consume()
+                            gesture.down(down.uptimeMillis, down.position.x, down.position.y)
+                            dragHeld = gesture.dragging
+                            var previousCount = 1
+                            do {
+                                val event = awaitPointerEvent()
+                                val pressed = event.changes.filter { it.pressed }
+                                val delta =
+                                    if (pressed.size == previousCount && pressed.isNotEmpty())
+                                        pressed
+                                            .map { it.positionChange() }
+                                            .fold(Offset.Zero) { sum, change -> sum + change } /
+                                            pressed.size.toFloat()
+                                    else Offset.Zero
+                                gesture.move(pressed.size, delta.x, delta.y)
+                                previousCount = pressed.size
+                                event.changes.forEach { it.consume() }
+                                if (pressed.isEmpty())
+                                    gesture.up(event.changes.maxOf { it.uptimeMillis })
+                                dragHeld = gesture.dragging
+                            } while (event.changes.any { it.pressed })
+                        }
+                    } finally {
+                        gesture.cancel()
+                        dragHeld = false
                     }
                 },
             contentAlignment = Alignment.Center,
@@ -1265,6 +1333,7 @@ internal fun PairDialog(
     discovered: DiscoveredComputer?,
     onPair: (String, String, String, String, Boolean) -> Unit,
     onDismiss: () -> Unit,
+    readFingerprint: suspend (String, Int) -> String = RemoteTransport::readFingerprint,
 ) {
     var host by rememberSaveable(discovered?.host) { mutableStateOf(discovered?.host ?: "") }
     var port by
@@ -1272,6 +1341,28 @@ internal fun PairDialog(
     var fingerprint by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
     var verified by remember { mutableStateOf(false) }
+    var readingFingerprint by remember { mutableStateOf(false) }
+    var fingerprintError by remember { mutableStateOf<String?>(null) }
+    var fingerprintRefresh by remember { mutableIntStateOf(0) }
+    LaunchedEffect(host, port, fingerprintRefresh) {
+        fingerprint = ""
+        verified = false
+        fingerprintError = null
+        val number = port.toIntOrNull() ?: return@LaunchedEffect
+        if (runCatching { LocalEndpoint.baseUrl(host, number) }.isFailure) return@LaunchedEffect
+        kotlinx.coroutines.delay(400)
+        readingFingerprint = true
+        try {
+            fingerprint = readFingerprint(host, number)
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            fingerprintError =
+                "Could not read the certificate. Check the address and Windows agent, then retry."
+        } finally {
+            readingFingerprint = false
+        }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Pair securely.") },
@@ -1281,12 +1372,15 @@ internal fun PairDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
-                    "Open pairing on Windows. Enter its IP address, full SHA-256 certificate fingerprint and temporary code. Then approve this phone on Windows."
+                    "Open pairing on Windows. The certificate fingerprint is read automatically. Compare it with Windows, enter the temporary code and approve this phone there."
                 )
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 OutlinedTextField(
                     host,
-                    { host = it },
+                    {
+                        host = it
+                        verified = false
+                    },
                     label = { Text("Computer IP address") },
                     enabled = !pairing,
                     singleLine = true,
@@ -1295,7 +1389,10 @@ internal fun PairDialog(
                 )
                 OutlinedTextField(
                     port,
-                    { port = it },
+                    {
+                        port = it
+                        verified = false
+                    },
                     label = { Text("Port") },
                     enabled = !pairing,
                     singleLine = true,
@@ -1303,27 +1400,38 @@ internal fun PairDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )
                 OutlinedTextField(
-                    fingerprint,
-                    {
-                        fingerprint = it
-                        verified = false
-                    },
-                    label = { Text("SHA-256 fingerprint from Windows") },
+                    fingerprint.chunked(8).joinToString(" "),
+                    {},
+                    readOnly = true,
+                    label = { Text("SHA-256 fingerprint to compare") },
                     enabled = !pairing,
                     minLines = 2,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
                 )
+                Text(
+                    "Read from the network; identity is unverified until you compare with Windows.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                if (readingFingerprint) LinearProgressIndicator(Modifier.fillMaxWidth())
+                fingerprintError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                TextButton({ fingerprintRefresh++ }, enabled = !pairing && !readingFingerprint) {
+                    Text("Read fingerprint again")
+                }
                 Row(
                     Modifier.toggleable(
                         value = verified,
-                        enabled = !pairing,
+                        enabled = !pairing && !readingFingerprint && fingerprint.isNotBlank(),
                         role = Role.Checkbox,
                         onValueChange = { verified = it },
                     ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Checkbox(verified, null, enabled = !pairing)
+                    Checkbox(
+                        verified,
+                        null,
+                        enabled = !pairing && !readingFingerprint && fingerprint.isNotBlank(),
+                    )
                     Text(
                         "I compared all 64 fingerprint digits with Windows",
                         style = MaterialTheme.typography.bodySmall,

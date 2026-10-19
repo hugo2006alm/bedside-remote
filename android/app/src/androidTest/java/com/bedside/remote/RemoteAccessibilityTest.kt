@@ -69,7 +69,23 @@ class RemoteAccessibilityTest {
     @Test
     fun fingerprintConfirmationHasOneNamedCheckboxTarget() {
         compose.setContent {
-            BedsideTheme { PairDialog(false, null, null, { _, _, _, _, _ -> }, {}) }
+            BedsideTheme {
+                PairDialog(false, null, null, { _, _, _, _, _ -> }, {}, { _, _ -> "AB".repeat(32) })
+            }
+        }
+        compose
+            .onNodeWithText("I compared all 64 fingerprint digits with Windows")
+            .performScrollTo()
+            .assertIsNotEnabled()
+        compose
+            .onNodeWithText("Computer IP address")
+            .performScrollTo()
+            .performTextInput("127.0.0.1")
+        compose.waitUntil(5000) {
+            compose
+                .onAllNodesWithText("ABABABAB ".repeat(7) + "ABABABAB")
+                .fetchSemanticsNodes()
+                .isNotEmpty()
         }
         compose
             .onNodeWithText("I compared all 64 fingerprint digits with Windows")
@@ -77,6 +93,33 @@ class RemoteAccessibilityTest {
             .assertHasClickAction()
             .performClick()
             .assertIsOn()
+    }
+
+    @Test
+    fun gridButtonOpensDetectedMediaAppsOnConnectedComputer() {
+        var launched = ""
+        compose.setContent {
+            BedsideTheme {
+                RemoteContent(
+                    AppState(
+                        status = ConnectionStatus.CONNECTED,
+                        catalog =
+                            AgentCatalog(
+                                apps =
+                                    listOf(
+                                        MediaApp("youtube", "YouTube", "browser"),
+                                        MediaApp("spotify", "Spotify", "app"),
+                                    )
+                            ),
+                    ),
+                    RemoteActions(launchApp = { launched = it }),
+                )
+            }
+        }
+        compose.onNodeWithContentDescription("Open media apps").performScrollTo().performClick()
+        compose.onNodeWithText("Open on your PC").assertExists()
+        compose.onNodeWithText("Spotify").performClick()
+        assertEquals("spotify", launched)
     }
 
     @Test

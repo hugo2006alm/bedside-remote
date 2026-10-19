@@ -46,6 +46,7 @@ class RemoteTransport(
     private val onError: (String) -> Unit,
     private val onAccepted: (String) -> Unit,
     private val onResult: (String, String, Boolean) -> Unit = { _, _, _ -> },
+    private val onCatalog: ((AgentCatalog) -> Unit)? = null,
 ) {
     private var socket: WebSocket? = null
     private var client: OkHttpClient? = null
@@ -61,6 +62,56 @@ class RemoteTransport(
     private val pending = mutableMapOf<String, PendingCommand>()
 
     companion object {
+        // This probe sends no HTTP request, code or credentials. Its result is an
+        // untrusted candidate until the user compares it with the Windows screen.
+        @SuppressLint("CustomX509TrustManager")
+        suspend fun readFingerprint(host: String, port: Int): String =
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val address = LocalEndpoint.address(host)
+                require(port in 1..65535) { "Enter a valid port" }
+                var candidate: X509Certificate? = null
+                val trust =
+                    object : X509TrustManager {
+                        override fun checkClientTrusted(
+                            chain: Array<out X509Certificate>?,
+                            authType: String?,
+                        ) = throw CertificateException("Client certificates are unsupported")
+
+                        override fun checkServerTrusted(
+                            chain: Array<out X509Certificate>?,
+                            authType: String?,
+                        ) {
+                            val leaf =
+                                chain?.firstOrNull()
+                                    ?: throw CertificateException("Missing certificate")
+                            leaf.checkValidity()
+                            candidate = leaf
+                        }
+
+                        override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+                    }
+                val tls = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), null) }
+                java.net.Socket().use { connection ->
+                    connection.connect(java.net.InetSocketAddress(address, port), 5000)
+                    (tls.socketFactory.createSocket(connection, address.hostAddress, port, true)
+                            as javax.net.ssl.SSLSocket)
+                        .use { socket ->
+                            socket.soTimeout = 5000
+                            socket.enabledProtocols =
+                                socket.supportedProtocols
+                                    .filter { it == "TLSv1.3" || it == "TLSv1.2" }
+                                    .toTypedArray()
+                            socket.startHandshake()
+                            java.security.MessageDigest.getInstance("SHA-256")
+                                .digest(
+                                    (candidate ?: throw CertificateException("Missing certificate"))
+                                        .encoded
+                                )
+                                .joinToString("") { "%02X".format(it) }
+                        }
+                }
+            }
+
         @SuppressLint(
             "CustomX509TrustManager"
         ) // Self-signed identity uses a user-verified DER pin; TLS tests prove mismatched pins send
@@ -269,6 +320,7 @@ class RemoteTransport(
                                 connected = true
                                 failures = 0
                                 onStatus(ConnectionStatus.CONNECTED)
+                                if (onCatalog != null) loadCatalog(http, target, current)
                             }
 
                         override fun onMessage(webSocket: WebSocket, text: String) =
@@ -350,6 +402,42 @@ class RemoteTransport(
             onError(error.message ?: "Connection failed")
             lost(current, false, true)
         }
+    }
+
+    private fun loadCatalog(http: OkHttpClient, target: PairedComputer, current: Long) {
+        val call =
+            http.newCall(
+                Request.Builder()
+                    .url(LocalEndpoint.baseUrl(target.host, target.port) + "/apps")
+                    .header("Authorization", "Bearer ${target.token}")
+                    .build()
+            )
+        call.timeout().timeout(8, TimeUnit.SECONDS)
+        call.enqueue(
+            object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    /* Older agents keep universal controls. */
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    response.use {
+                        val catalog =
+                            runCatching {
+                                    require(it.isSuccessful)
+                                    val source = it.body?.source() ?: error("Empty app catalog")
+                                    source.request(65537)
+                                    require(source.buffer.size <= 65536)
+                                    WireJson.decodeFromString<AgentCatalog>(source.readUtf8())
+                                        .validate()
+                                }
+                                .getOrNull() ?: return
+                        synchronized(this@RemoteTransport) {
+                            if (generation == current && connected) onCatalog?.invoke(catalog)
+                        }
+                    }
+                }
+            }
+        )
     }
 
     @Synchronized
