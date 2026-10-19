@@ -36,9 +36,9 @@ Do not expose the agent's port to the Internet or enable router forwarding. If m
 1. Open the Windows agent and start its temporary pairing window. Note its LAN address, port, TLS fingerprint and six-digit code.
 2. On Android, choose the discovered computer or enter its address/port. Enter and verify the full SHA-256 certificate fingerprint from the Windows display before sending the code. Name the phone and request pairing.
 3. Approve the named phone in the Windows prompt. Android saves the computer with its own encrypted credentials and reconnects automatically when selected.
-4. Navigate with the remote, type with Android's native keyboard or open the touchpad. **Home** opens the Windows Start menu. Media shortcuts act on Windows; contextual player controls use the selected extension session.
+4. Navigate with the remote, type with Android's native keyboard or open the touchpad. With a browser session selected, arrows move visible focus and **OK** activates the selected control; choose **Windows** above the D-pad for ordinary keyboard arrows. **Home** opens the Windows Start menu. Media shortcuts act on Windows; contextual player controls use the selected extension session.
 5. In the official YouTube Android app, choose **Share → Bedside Remote**, then play now/next/add to queue. Choose a paired computer when necessary. The Windows agent owns queue order and persists it between sessions. A natural end advances only when supported; manual navigation and disconnects do not manufacture completion.
-6. Select the active player/tab when multiple sessions exist. Netflix buttons appear only when the relevant controls are actually available. Audio/subtitles may open the website's menu; use universal navigation to make the selection.
+6. Select the active player/tab when multiple sessions exist. Netflix buttons appear only when the relevant controls are actually available. Its combined **Audio & subtitles** button opens/closes the shared website menu; use browser focus navigation to select its controls.
 
 Revoke a phone in the Windows device list to terminate access. Removing a saved computer on Android removes local credentials; revoke it on Windows as well. A reset server certificate requires verifying the new fingerprint before pairing again.
 

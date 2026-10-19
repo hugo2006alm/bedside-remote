@@ -62,6 +62,8 @@ The user confirmed a lasting Edge native connection after running the repair scr
 
 ## Physical acceptance checklist
 
+On 2026-10-19 the user confirmed that updating the actual Edge extension directory in Documents restored the Netflix episode player and title in both extension and Android. Earlier local copies in another directory were not the loaded extension. Home preview pause control was also observed. The user reported that episode audio/subtitle actions opened the shared menu but returned a false failure, did not close it and appeared as duplicate Android buttons. Nested title spacing, shared-menu open/close confirmation and a single Android control now have regression coverage; their real follow-up remains pending. Local validation passed 26 browser tests and Mozilla lint with no warnings, Android lint/16 unit tests/APK and instrumentation APK compilation, and 92 Windows core/68 isolated integration checks for the navigation changes. The new Compose cases still require execution in CI. No real episode seek, episode transition, full D-pad browse or menu-selection success is inferred from these observations.
+
 The observations above are partial physical evidence. The following checklist remains open until all relevant cases are executed and recorded with device/browser versions:
 
 - Extend the recorded matching-key APK/Windows upgrade and signed-extension checks to a separate clean Windows installation; verify other persisted settings and queue data.

@@ -4,7 +4,7 @@ Practical reference for work outside the MVP. Listing an item is not evidence of
 
 ## MVP — required for the first release
 
-- **Universal remote:** media/volume, D-pad/navigation, trackpad gestures and Android keyboard with Unicode.
+- **Universal remote:** media/volume, D-pad/navigation with browser focus selection and Windows keyboard fallback, trackpad gestures and Android keyboard with Unicode.
 - **Connection/security:** discovery and manual connection, explicit pairing approval, encryption/authentication, reconnect, device management and revocation.
 - **YouTube in Zen/Firefox:** Android sharing, remote playback, synchronized editable queue, automatic advance when permitted, metadata and contextual controls.
 - **Netflix:** contextual player/progress, episode/intro/recap controls when available; stable audio/subtitle access if viable; universal fallback. The user approved an Edge companion for the Store PWA because Zen on Windows cannot provide its DRM playback. Live Store-app compatibility remains a validation requirement.

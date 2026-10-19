@@ -165,6 +165,17 @@ try
     var nextState = await ReadUntil(socket, x => x.GetProperty("type").GetString() == "state" && x.GetProperty("playback").ValueKind == JsonValueKind.Object && x.GetProperty("playback").GetProperty("videoId").GetString() == "abcdefghijk");
     Check(nextState.GetProperty("queue").GetArrayLength() == 2 && nextState.GetProperty("currentEntryId").GetString() != null, "Current queue entry retained and synchronized.");
     Check(storage.Read<QueueSnapshot>("queue.json")!.Queue.Count == 2, "Queue persisted to disk.");
+    using (var navigation = await ConnectSocket(credential))
+    {
+        await Read(navigation);
+        var id = Guid.NewGuid().ToString();
+        var beforeInput = injectedInputs;
+        await SendCommand(navigation, id, 1, "browser.navigate", new { key = "right" });
+        var focus = await ReadNative(native);
+        Check(focus.GetProperty("command").GetString() == "navigateRight" && focus.GetProperty("tabId").GetInt32() == 7, "D-pad navigation targets the explicitly selected browser tab.");
+        await SendResult(native, focus);
+        Check((await Ack(navigation, id)).GetProperty("ok").GetBoolean() && injectedInputs == beforeInput, "Browser focus navigation does not inject Windows scrolling or keyboard input.");
+    }
     using (var disconnecting = await ConnectSocket(credential))
     {
         await Read(disconnecting);

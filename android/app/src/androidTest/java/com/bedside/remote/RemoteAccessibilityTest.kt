@@ -80,6 +80,37 @@ class RemoteAccessibilityTest {
     }
 
     @Test
+    fun netflixHasOneCombinedAudioAndSubtitlesControl() {
+        var action = ""
+        val playback =
+            Playback(
+                platform = "netflix",
+                tabId = 1,
+                title = "Series E03 Episode",
+                paused = true,
+                position = 0.0,
+                duration = 0.0,
+                ended = false,
+                capabilities = listOf("audio", "subtitles"),
+            )
+        compose.setContent {
+            BedsideTheme {
+                PlaybackPanel(
+                    AppState(
+                        status = ConnectionStatus.CONNECTED,
+                        remote = RemoteState(extensionConnected = true, playback = playback),
+                    ),
+                    RemoteActions(browser = { command, _ -> action = command }),
+                )
+            }
+        }
+        compose.onNodeWithText("Audio & subtitles").assertHasClickAction().performClick()
+        assertEquals("audio", action)
+        compose.onNodeWithText("Audio").assertDoesNotExist()
+        compose.onNodeWithText("Subtitles").assertDoesNotExist()
+    }
+
+    @Test
     fun dpadExposesNamedTouchTargetsAndSendsCorrectKey() {
         var key = ""
         compose.setContent { BedsideTheme { DPad(true) { key = it } } }
@@ -89,6 +120,31 @@ class RemoteAccessibilityTest {
             .assertHasClickAction()
             .performClick()
         assertEquals("up", key)
+        compose.onNodeWithContentDescription("OK / Enter").performClick()
+        assertEquals("enter", key)
+    }
+
+    @Test
+    fun browserDpadSelectsElementsAndWindowsModeRetainsUniversalKeys() {
+        var navigation = ""
+        var key = ""
+        compose.setContent {
+            BedsideTheme {
+                RemoteContent(
+                    AppState(
+                        status = ConnectionStatus.CONNECTED,
+                        remote = RemoteState(activeSessionId = "browser:1"),
+                    ),
+                    RemoteActions(key = { key = it }, navigate = { navigation = it }),
+                )
+            }
+        }
+        compose.onNodeWithContentDescription("Move right").performScrollTo().performClick()
+        assertEquals("right", navigation)
+        assertEquals("", key)
+        compose.onNodeWithText("Windows").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Move down").performScrollTo().performClick()
+        assertEquals("down", key)
         compose.onNodeWithContentDescription("OK / Enter").performClick()
         assertEquals("enter", key)
     }

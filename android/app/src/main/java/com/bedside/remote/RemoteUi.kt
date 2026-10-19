@@ -52,6 +52,7 @@ import kotlin.math.abs
 
 data class RemoteActions(
     val key: (String) -> Unit = {},
+    val navigate: (String) -> Unit = key,
     val media: (String) -> Unit = {},
     val browser: (String, Double?) -> Unit = { _, _ -> },
     val session: (String) -> Unit = {},
@@ -81,6 +82,7 @@ fun BedsideApp(state: AppState, model: RemoteViewModel) {
         remember(model) {
             RemoteActions(
                 key = model::key,
+                navigate = model::navigate,
                 media = model::media,
                 browser = model::browser,
                 session = model::session,
@@ -300,6 +302,8 @@ private fun statusLabel(status: ConnectionStatus) =
 
 @Composable
 private fun RemoteScreen(state: AppState, actions: RemoteActions, onKeyboard: () -> Unit) {
+    var browserNavigation by rememberSaveable { mutableStateOf(true) }
+    val browserTarget = browserNavigation && state.remote.activeSessionId != null
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -312,13 +316,32 @@ private fun RemoteScreen(state: AppState, actions: RemoteActions, onKeyboard: ()
                 modifier = Modifier.weight(1f),
             )
             Text(
-                "UNIVERSAL",
+                if (browserTarget) "BROWSER" else "UNIVERSAL",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 6.dp),
             )
         }
-        DPad(state.connected, actions.key)
+        if (state.remote.activeSessionId != null) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                FilterChip(
+                    selected = !browserNavigation,
+                    onClick = { browserNavigation = false },
+                    label = { Text("Windows") },
+                )
+                FilterChip(
+                    selected = browserNavigation,
+                    onClick = { browserNavigation = true },
+                    label = {
+                        Text(
+                            if (state.remote.playback?.platform == "netflix") "Netflix"
+                            else "Browser"
+                        )
+                    },
+                )
+            }
+        }
+        DPad(state.connected, if (browserTarget) actions.navigate else actions.key)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             Control(Icons.AutoMirrored.Rounded.ArrowBack, "Back / Escape", state.connected) {
                 actions.key("escape")
@@ -679,13 +702,24 @@ internal fun PlaybackPanel(state: AppState, actions: RemoteActions) {
                             actions.browser("fullscreen", null)
                         }
                 }
-                listOf(
-                        "skipIntro" to "Skip intro",
-                        "skipRecap" to "Skip recap",
-                        "nextEpisode" to "Next episode",
-                        "subtitles" to "Subtitles",
-                        "audio" to "Audio",
-                    )
+                val contextualActions = buildList {
+                    add("skipIntro" to "Skip intro")
+                    add("skipRecap" to "Skip recap")
+                    add("nextEpisode" to "Next episode")
+                    if (playback.platform == "netflix") {
+                        if (
+                            "audio" in playback.capabilities || "subtitles" in playback.capabilities
+                        )
+                            add(
+                                (if ("audio" in playback.capabilities) "audio" else "subtitles") to
+                                    "Audio & subtitles"
+                            )
+                    } else {
+                        add("subtitles" to "Subtitles")
+                        add("audio" to "Audio")
+                    }
+                }
+                contextualActions
                     .filter { it.first in playback.capabilities }
                     .forEach { (command, label) ->
                         OutlinedButton(

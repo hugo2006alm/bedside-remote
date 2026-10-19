@@ -3,6 +3,36 @@ import { test } from 'node:test';
 import { JSDOM } from 'jsdom';
 import { build } from 'esbuild';
 
+test('rejected snapshots retry unchanged media and current-document identity follows SPA routes', async () => {
+  const dom = new JSDOM('<title>Netflix</title><video></video>', { url: 'https://www.netflix.com/browse', runScripts: 'outside-only' });
+  const listeners: ((value: unknown) => unknown)[] = [];
+  const timers: (() => void)[] = [];
+  let reports = 0;
+  let now = 1000;
+  dom.window.Date.now = () => now;
+  Object.assign(dom.window, {
+    browser: { runtime: {
+      sendMessage: async (value: { type: string }) => value.type === 'player.state' ? { ok: ++reports > 1 } : undefined,
+      onMessage: { addListener: (listener: (value: unknown) => unknown) => listeners.push(listener) }
+    } },
+    setInterval: (callback: () => void) => { timers.push(callback); return 1; }, clearInterval: () => {}
+  });
+  const bundle = await build({ entryPoints: ['src/content.ts'], bundle: true, write: false, format: 'iife', target: 'es2022' });
+  dom.window.eval(bundle.outputFiles[0]!.text);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reports, 1);
+  now += 1000; timers[0]!();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reports, 2, 'a rejected initial snapshot retries even without a new media state');
+  now += 1000; timers[0]!();
+  assert.equal(reports, 2, 'an accepted unchanged snapshot is deduplicated');
+  dom.reconfigure({ url: 'https://www.netflix.com/watch/12345' });
+  const identity = await listeners[0]!({ type: 'player.identity' }) as { instance: string; url: string };
+  assert.equal(identity.url, 'https://www.netflix.com/watch/12345');
+  assert.equal(typeof identity.instance, 'string');
+  dom.window.close();
+});
+
 test('content never manufactures natural completion for load, SPA navigation or untrusted events', async () => {
   const dom = new JSDOM('<!doctype html><title>Fixture</title><div id="movie_player"><video></video></div>', {
     url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', runScripts: 'outside-only'

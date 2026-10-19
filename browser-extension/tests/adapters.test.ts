@@ -23,6 +23,16 @@ async function fixture(name: 'youtube' | 'netflix') {
   const adapter = name === 'youtube' ? new YoutubeAdapter(dom.window.document) : new NetflixAdapter(dom.window.document);
   return { dom, video, adapter };
 }
+test('Netflix selects the episode video instead of a retained Home preview', async () => {
+  const { dom, video, adapter } = await fixture('netflix');
+  const preview = dom.window.document.createElement('video');
+  preview.hidden = true; dom.window.document.body.prepend(preview);
+  assert.equal(adapter.video(), video);
+  assert.equal(adapter.state(false).title, 'Evening episode');
+  assert.equal(adapter.state(false).duration, 120);
+  dom.window.close();
+});
+
 test('YouTube reports public metadata, finite progress and actual available controls', async () => {
   const { dom, video, adapter } = await fixture('youtube');
   video.currentTime = 24;
@@ -100,5 +110,55 @@ test('missing/failed player exposes no playback controls and reports media error
   video.remove();
   assert.equal(adapter.state(true).ended, false);
   assert.equal(adapter.state(false).duration, 0);
+  dom.window.close();
+});
+
+test('Netflix separates series, episode number and episode title text nodes', async () => {
+  const { dom, adapter } = await fixture('netflix');
+  const title = dom.window.document.querySelector('[data-uia="video-title"]')!;
+  const spans = ['Evening series', 'E03', 'A quiet episode'].map(text => {
+    const span = dom.window.document.createElement('span'); span.textContent = text; return span;
+  });
+  title.replaceChildren(...spans);
+  assert.equal(adapter.metadata().title, 'Evening series E03 A quiet episode');
+  dom.window.close();
+});
+
+test('Netflix audio and subtitles share a menu that confirms both opening and closing without aria-expanded', async () => {
+  const { dom, adapter } = await fixture('netflix');
+  const button = dom.window.document.querySelector<HTMLElement>('[data-uia="control-audio-subtitle"]')!;
+  button.removeAttribute('aria-expanded');
+  const menu = dom.window.document.createElement('div');
+  menu.dataset.uia = 'selector-audio-subtitle'; menu.hidden = true;
+  Object.defineProperty(menu, 'getClientRects', { value: () => [{ width: 200, height: 200 }] });
+  dom.window.document.body.append(menu);
+  button.addEventListener('click', () => { menu.hidden = !menu.hidden; });
+  await adapter.execute('audio'); assert.equal(menu.hidden, false);
+  await adapter.execute('subtitles'); assert.equal(menu.hidden, true);
+  dom.window.close();
+});
+
+test('Netflix closes a hover-only audio menu through controller leave events', async () => {
+  const { dom, adapter } = await fixture('netflix');
+  const button = dom.window.document.querySelector<HTMLElement>('[data-uia="control-audio-subtitle"]')!;
+  button.removeAttribute('aria-expanded');
+  const menu = dom.window.document.createElement('div'); menu.className = 'track-list-container'; menu.hidden = true;
+  Object.defineProperty(menu, 'getClientRects', { value: () => [{ width: 200, height: 200 }] });
+  dom.window.document.body.append(menu);
+  button.addEventListener('click', () => { menu.hidden = false; });
+  button.addEventListener('mouseout', () => { menu.hidden = true; });
+  await adapter.execute('audio'); assert.equal(menu.hidden, false);
+  await adapter.execute('audio'); assert.equal(menu.hidden, true);
+  dom.window.close();
+});
+
+test('an unrelated open dialog cannot falsely confirm the Netflix audio menu', async () => {
+  const { dom, adapter } = await fixture('netflix');
+  const dialog = dom.window.document.createElement('div'); dialog.setAttribute('role', 'dialog');
+  Object.defineProperty(dialog, 'getClientRects', { value: () => [{ width: 200, height: 200 }] });
+  dom.window.document.body.append(dialog);
+  await assert.rejects(adapter.execute('audio'), /did not confirm/);
+  dom.window.document.querySelector('[data-uia="control-audio-subtitle"]')!.setAttribute('aria-expanded', 'true');
+  await assert.rejects(adapter.execute('audio'), /did not confirm/, 'an unchanged expanded flag cannot falsely confirm closing');
   dom.window.close();
 });

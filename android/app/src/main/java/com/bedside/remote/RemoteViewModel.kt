@@ -304,6 +304,12 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         command("input.key", "key" to JsonPrimitive(key))
     }
 
+    fun navigate(key: String) {
+        if (mutableState.value.remote.activeSessionId != null)
+            command("browser.navigate", "key" to JsonPrimitive(key))
+        else this.key(key)
+    }
+
     fun media(command: String) {
         this.command("media.command", "command" to JsonPrimitive(command))
     }

@@ -1,7 +1,8 @@
 import { NetflixAdapter } from './adapters/netflix';
 import { listen } from './messages';
 import { YoutubeAdapter } from './adapters/youtube';
-import { object, onlyKeys, parseNativeCommand, platformForUrl } from './protocol';
+import { navigate } from './navigation';
+import { isNavigation, object, onlyKeys, parseNativeCommand, platformForUrl } from './protocol';
 
 const platform = platformForUrl(location.href);
 const adapter = platform === 'youtube' ? new YoutubeAdapter(document) : platform === 'netflix' ? new NetflixAdapter(document) : null;
@@ -42,10 +43,16 @@ if (adapter) {
     if (!force && (serialized === lastState || Date.now() - lastSent < 1000)) return;
     lastState = serialized;
     lastSent = Date.now();
-    try { await browser.runtime.sendMessage({ type: 'player.state', instance, state }); }
+    try {
+      const result: unknown = await browser.runtime.sendMessage({ type: 'player.state', instance, state });
+      if (object(result) && result.ok === false) lastState = '';
+    }
     catch { /* Extension reload or sleeping background: next poll retries. */ lastState = ''; }
   }
   listen((message: unknown) => {
+    if (object(message) && message.type === 'player.identity' && onlyKeys(message, ['type'])) {
+      return Promise.resolve({ instance, url: location.href });
+    }
     if (object(message) && message.type === 'player.snapshot' && onlyKeys(message, ['type'])) {
       return publish(true).then(() => ({ ok: true }));
     }
@@ -57,7 +64,8 @@ if (adapter) {
       try {
         const command = parseNativeCommand(message.command);
         if (command.command === 'openYoutube' || command.command === 'selectTab') throw new Error('Tab operations must be handled by the background.');
-        await adapter!.execute(command.command, command.position);
+        if (isNavigation(command.command)) navigate(document, command.command);
+        else await adapter!.execute(command.command, command.position);
         error = undefined;
         return { ok: true };
       } catch (cause) {

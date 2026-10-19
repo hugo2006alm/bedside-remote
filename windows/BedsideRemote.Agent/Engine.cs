@@ -151,6 +151,19 @@ public sealed class Engine
     }
     private async Task ExecuteBrowserAsync(Command command, CancellationToken token)
     {
+        if (command.Action == "browser.navigate")
+        {
+            var key = command.Payload.GetProperty("key").GetString()!;
+            var action = key switch { "up" => "navigateUp", "down" => "navigateDown", "left" => "navigateLeft", "right" => "navigateRight", "enter" => "navigateEnter", "escape" => "navigateBack", _ => throw new FormatException("Unsupported navigation key.") };
+            NativeConnection connection; int tabId;
+            lock (sync)
+            {
+                var selected = FindActive() ?? throw new InvalidOperationException("Select a browser session before navigating.");
+                connection = selected.Connection; tabId = selected.Tab.GetProperty("tabId").GetInt32();
+            }
+            CheckResult(await connection.CommandAsync(new() { ["command"] = action, ["tabId"] = tabId }, token));
+            return;
+        }
         if (command.Action == "media.command")
         {
             var value = command.Payload.GetProperty("command").GetString();

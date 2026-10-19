@@ -17,6 +17,8 @@ test('background tracks multiple tabs, explicit selection, reload and native com
   const removed = new EventBus();
   const nativeOut: Record<string, unknown>[] = [];
   const playerCommands: { tabId: number; message: unknown }[] = [];
+  const identities = new Map<number, string>();
+  let snapshotRequests = 0;
   let connections = 0;
   let nativeError: { message: string } | undefined;
   const url = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
@@ -34,7 +36,11 @@ test('background tracks multiple tabs, explicit selection, reload and native com
     tabs: {
       get: async (id: number) => live.get(id), query: async () => [],
       onActivated: activated, onUpdated: updated, onRemoved: removed,
-      sendMessage: async (tabId: number, message: unknown) => { playerCommands.push({ tabId, message }); return { ok: true }; }
+      sendMessage: async (tabId: number, message: { type: string }) => {
+        if (message.type === 'player.identity') return { instance: identities.get(tabId), url: live.get(tabId)?.url };
+        if (message.type === 'player.snapshot') { snapshotRequests++; return { ok: true }; }
+        playerCommands.push({ tabId, message }); return { ok: true };
+      }
     },
     alarms: { onAlarm: new EventBus(), create: async () => {} }
   };
@@ -48,6 +54,7 @@ test('background tracks multiple tabs, explicit selection, reload and native com
   });
   const state = (platform: string) => ({ platform, title: 'Video', paused: false, position: 5, duration: 100, ended: false, capabilities: ['playPause', 'seek'], ...(platform === 'youtube' ? { videoId: 'dQw4w9WgXcQ' } : {}) });
   async function report(tabId: number, instance: string, value: unknown) {
+    identities.set(tabId, instance);
     await Promise.all(runtimeMessage.emit({ type: 'player.state', instance, state: value }, { id: api.runtime.id, tab: live.get(tabId), frameId: 0, url: live.get(tabId)!.url }));
   }
   try {
@@ -64,6 +71,17 @@ test('background tracks multiple tabs, explicit selection, reload and native com
     await report(2, 'second', state('netflix'));
     assert.equal(nativeOut.at(-1)!.activeTabId, 2, 'newly activated compatible tab becomes target after its first player snapshot');
     assert.equal((nativeOut.at(-1)!.tabs as unknown[]).length, 2);
+    const browseUrl = live.get(2)!.url;
+    live.get(2)!.url = 'https://www.netflix.com/watch/456';
+    updated.emit(2, { url: live.get(2)!.url });
+    assert.equal(snapshotRequests, 1, 'route changes request a fresh state even without new media values');
+    const episode = { type: 'player.state', instance: 'second', state: { ...state('netflix'), title: 'Episode' } };
+    const spaResult = await runtimeMessage.emit(episode, { id: api.runtime.id, tab: live.get(2), frameId: 0, url: browseUrl })[0];
+    assert.equal((spaResult as { ok: boolean }).ok, true, 'the current document may report after a same-document route change');
+    assert.equal(nativeOut.at(-1)!.activeTabId, 2, 'the selected Netflix tab remains selected after entering its episode');
+    assert.equal((nativeOut.at(-1)!.tabs as { title: string }[]).find(tab => tab.title === 'Episode')?.title, 'Episode');
+    const staleResult = await runtimeMessage.emit({ ...episode, instance: 'old-document' }, { id: api.runtime.id, tab: live.get(2), frameId: 0, url: browseUrl })[0];
+    assert.equal((staleResult as { ok: boolean }).ok, false, 'a replaced document cannot resurrect its old player');
     nativeMessage.emit({ version: 1, type: 'browser.command', id: 'select', command: 'selectTab', tabId: 1 });
     await new Promise(resolve => setTimeout(resolve, 5));
     assert.equal(nativeOut.at(-2)!.activeTabId, 1, 'native selection synchronizes popup target without player actions');
