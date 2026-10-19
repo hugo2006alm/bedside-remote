@@ -4,6 +4,8 @@ The .NET 10 LTS WPF agent runs in the signed-in user's interactive session, with
 
 The compact charcoal, ivory and brass window shares Android’s DM Sans/Manrope fonts and rounded surfaces. It fits the current monitor’s work area at its DPI; cards scroll while the header/footer remain reachable. Preferences and secondary network addresses expand on demand. Launching it again restores the existing window, including after closing it to the tray. Explicit PerMonitorV2 awareness handles monitor scaling; process-local software rendering keeps this small utility visible in graphics/remote-session configurations that produced a blank WPF client.
 
+The executable, window, notification area and installer use the same [minimal application mark](../assets/brand/README.md) as Android and both browser companions. Generated ICO frames cover small tray sizes through high-DPI window/installer rendering.
+
 ## Build and validate
 
 Install the .NET 10.0.402 SDK on Windows, matching the repository's `global.json`. From the repository root:
@@ -26,6 +28,8 @@ ISCC.exe /DAppVersion=0.1.0-alpha.1 "/DPublishDir=$PWD/artifacts/windows" "/DOut
 ```
 
 Use a consistent release version across components. The self-contained installer includes the .NET runtime. Authenticode signing is performed by the release workflow when its signing credentials are configured.
+
+If an update reports a file in use, exit Bedside Remote from its tray menu and temporarily disable the browser companion (or close its browser), then retry the installer. Native host reconnect attempts can otherwise briefly lock the executable even after the main window exits. Re-enable the companion and start the agent after installation; existing pairings remain stored separately.
 
 The published `licenses/` directory contains the dependency and runtime notices from [windows/licenses](licenses/README.md). These notices apply only to the identified third-party components, not to the project's own source.
 

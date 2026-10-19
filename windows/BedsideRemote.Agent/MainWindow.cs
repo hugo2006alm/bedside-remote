@@ -32,6 +32,7 @@ public sealed class MainWindow : Window
     private readonly ListBox deviceList = new() { MaxHeight = 168, BorderThickness = new Thickness(0), Background = Brushes.Transparent, Foreground = Ivory, DisplayMemberPath = "DeviceName" };
     private readonly Button revoke;
     private readonly System.Windows.Forms.NotifyIcon tray;
+    private readonly System.Drawing.Icon trayIcon;
     private bool exiting;
     private Window? pairingDialog;
     public event EventHandler? ExitRequested;
@@ -47,6 +48,10 @@ public sealed class MainWindow : Window
     {
         this.server = server; this.storage = storage; this.settings = settings; this.fingerprint = fingerprint;
         Title = "Bedside Remote"; Width = 640; Height = 700; MinWidth = 400; MinHeight = 360;
+        var iconUri = new Uri("pack://application:,,,/BedsideRemote;component/Assets/AppIcon.ico");
+        Icon = System.Windows.Media.Imaging.BitmapDecoder.Create(iconUri, System.Windows.Media.Imaging.BitmapCreateOptions.None, System.Windows.Media.Imaging.BitmapCacheOption.OnLoad).Frames.OrderByDescending(frame => frame.PixelWidth).First();
+        using (var iconStream = System.Windows.Application.GetResourceStream(iconUri).Stream)
+            trayIcon = new System.Drawing.Icon(iconStream, 32, 32);
         Background = Canvas; Foreground = Ivory; FontFamily = BodyFont; FontSize = 14;
         Resources = Styles();
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
@@ -55,7 +60,10 @@ public sealed class MainWindow : Window
         layout.RowDefinitions.Add(new RowDefinition());
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         var header = new StackPanel { Margin = new Thickness(0, 0, 0, 20) };
-        header.Children.Add(Text("BEDSIDE / REMOTE", 11, Brass));
+        var brand = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+        brand.Children.Add(new System.Windows.Controls.Image { Source = Icon, Width = 28, Height = 28, Margin = new Thickness(0, 0, 10, 0) });
+        var brandName = Text("BEDSIDE / REMOTE", 11, Brass); brandName.VerticalAlignment = VerticalAlignment.Center;
+        brand.Children.Add(brandName); header.Children.Add(brand);
         header.Children.Add(new TextBlock { Text = "Your PC, within reach.", FontFamily = DisplayFont, FontSize = 28, FontWeight = FontWeights.SemiBold, Foreground = Ivory, Margin = new Thickness(0, 8, 0, 8), TextWrapping = TextWrapping.Wrap });
         header.Children.Add(status); layout.Children.Add(header);
         var cards = new StackPanel();
@@ -125,10 +133,10 @@ public sealed class MainWindow : Window
         var menu = new System.Windows.Forms.ContextMenuStrip();
         menu.Items.Add("Open Bedside Remote", null, (_, _) => Dispatcher.Invoke(OpenWindow));
         menu.Items.Add("Exit", null, (_, _) => Dispatcher.Invoke(Exit));
-        tray = new System.Windows.Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Application, Text = "Bedside Remote", Visible = true, ContextMenuStrip = menu };
+        tray = new System.Windows.Forms.NotifyIcon { Icon = trayIcon, Text = "Bedside Remote", Visible = true, ContextMenuStrip = menu };
         tray.DoubleClick += (_, _) => Dispatcher.Invoke(OpenWindow);
         Closing += (_, e) => { if (!exiting) { e.Cancel = true; Hide(); } };
-        Closed += (_, _) => tray.Dispose();
+        Closed += (_, _) => { tray.Dispose(); trayIcon.Dispose(); };
         SourceInitialized += (_, _) => { DarkTitleBar(this); FitWindow(); };
         DpiChanged += (_, _) => Dispatcher.BeginInvoke(FitWindow);
         server.Approve = ApproveAsync; server.DevicesChanged += () => Dispatcher.BeginInvoke(RefreshDevices); RefreshDevices();

@@ -51,6 +51,14 @@ test('background tracks multiple tabs, explicit selection, reload and native com
     await Promise.all(runtimeMessage.emit({ type: 'player.state', instance, state: value }, { id: api.runtime.id, tab: live.get(tabId), frameId: 0, url: live.get(tabId)!.url }));
   }
   try {
+    const status = async () => await runtimeMessage.emit({ type: 'popup.status' }, { id: api.runtime.id, url: api.runtime.getURL('popup.html') })[0] as { connected: boolean; connecting: boolean; error: string };
+    assert.equal((await status()).connected, false, 'a native Port object does not establish a working host connection');
+    assert.equal((await status()).connecting, true);
+    nativeMessage.emit({ version: 2, type: 'native.ready' });
+    assert.equal((await status()).connected, false, 'an invalid ready notice must not report success');
+    nativeMessage.emit({ version: 1, type: 'native.ready' });
+    assert.equal((await status()).connected, true, 'only the host confirmation establishes initial connectivity');
+    assert.equal((await status()).connecting, false);
     await report(1, 'first', state('youtube'));
     activated.emit({ tabId: 2 });
     await report(2, 'second', state('netflix'));
@@ -91,6 +99,10 @@ test('background tracks multiple tabs, explicit selection, reload and native com
     nativeError = undefined;
     await new Promise(resolve => setTimeout(resolve, 1100));
     assert.equal(connections, 2, 'native host disconnect retries with bounded backoff');
+    assert.equal((await status()).connected, false, 'a retry must not flash a false connected state before host confirmation');
+    nativeMessage.emit({ version: 1, type: 'native.ready' });
+    assert.equal((await status()).connected, true);
+    assert.equal((await status()).error, '');
     assert.equal(nativeOut.at(-1)!.type, 'browser.state', 'reconnection sends a fresh snapshot, never replays player commands');
     assert.equal(playerCommands.length, 1);
     for (let index = 100; index < 133; index++) {
@@ -102,5 +114,11 @@ test('background tracks multiple tabs, explicit selection, reload and native com
     assert.equal((bounded.tabs as unknown[]).length, 32, '33 compatible tabs obey the native parser limit');
     assert.equal((bounded.tabs as { tabId: number }[])[0]!.tabId, 132, 'selected tab survives truncation even when added last');
     assert.equal(bounded.activeTabId, 132);
+    await Promise.all(runtimeMessage.emit({ type: 'popup.reconnect' }, { id: api.runtime.id, url: api.runtime.getURL('popup.html') }));
+    assert.equal(connections, 3, 'explicit retry replaces an existing port');
+    assert.equal((await status()).connected, false);
+    nativeMessage.emit({ version: 1, type: 'browser.command', id: 'legacy-confirm', command: 'selectTab', tabId: 132 });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal((await status()).connected, true, 'a valid legacy command confirms an older host without a ready notice');
   } finally { for (const timer of timers) clearTimeout(timer); }
 });

@@ -135,7 +135,7 @@ listen((message: unknown, sender) => {
   // Popup messages are accepted only from extension pages, never player frames.
   if (sender.tab || !sender.url?.startsWith(browser.runtime.getURL(''))) return undefined;
   if (message.type === 'popup.status' && onlyKeys(message, ['type'])) {
-    return Promise.resolve({ connected: native.connected, error: native.lastError, activeTabId, tabs: [...tabs.values()].map(item => item.state) });
+    return Promise.resolve({ connected: native.connected, connecting: native.connecting, error: native.lastError, activeTabId, tabs: [...tabs.values()].map(item => item.state) });
   }
   if (message.type === 'popup.select' && onlyKeys(message, ['type', 'tabId']) && typeof message.tabId === 'number' && tabs.has(message.tabId)) {
     activeTabId = message.tabId;
@@ -144,7 +144,7 @@ listen((message: unknown, sender) => {
     return Promise.resolve({ ok: true });
   }
   if (message.type === 'popup.reconnect' && onlyKeys(message, ['type'])) {
-    native.connect();
+    native.reconnect();
     return Promise.resolve({ ok: true });
   }
   return undefined;

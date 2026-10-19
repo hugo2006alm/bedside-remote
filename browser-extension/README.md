@@ -33,6 +33,10 @@ The Firefox Manifest V3 background script uses a Native Messaging port and resto
 
 The popup includes the browser's disconnect reason when available. For `No such native application com.bedside.remote`, verify the Windows installer's current-user registration at `HKCU\Software\Mozilla\NativeMessagingHosts\com.bedside.remote`, the referenced JSON file, and the installed add-on ID (`bedside-remote@hugo2006alm`). Use the [registration repair instructions](../windows/README.md#pairing-and-browser-integration) from the user's ordinary Windows terminal; a successful check in a separate tooling context is not proof that the normal browser sees the same registration. A manifest validation or extension allowlist failure can also prevent host discovery; the browser console may provide a more specific error. Keep the allowlist restricted to this add-on.
 
+The popup shows **Connecting** until Windows confirms that the native executable reached the interactive agent. A Port object alone never shows **Connected**. After five seconds without confirmation it asks you to start/update Windows and retry; a valid command from an older host also confirms the connection. Retry replaces the previous connection and ignores its late callbacks.
+
+The toolbar and popup share the [application mark](../assets/brand/README.md), charcoal/ivory/brass palette and bundled DM Sans/Manrope fonts. Both browser packages include font license notices. The reviewer source archive also includes those Android-hosted font sources and notices for a standalone rebuild.
+
 ## Player behavior and practical limits
 
 - Remote **Play** calls standard `video.play()` and reports autoplay denial. Opening a YouTube URL waits for a usable player and attempts playback; consent/interstitial pages and autoplay restrictions produce explicit errors. The host acknowledgement is not proof that streaming playback succeeded.

@@ -4,9 +4,11 @@
     <UseWPF>true</UseWPF><UseWindowsForms>true</UseWindowsForms>
     <EnableWindowsTargeting>true</EnableWindowsTargeting><ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>BedsideRemote</AssemblyName>
+    <ApplicationIcon>Assets/AppIcon.ico</ApplicationIcon>
     <Product>Bedside Remote</Product><Company>hugo2006alm</Company><Copyright>Copyright (c) 2026 hugo2006alm</Copyright>
   </PropertyGroup>
   <ItemGroup>
+    <Resource Include="Assets/AppIcon.ico" />
     <Resource Include="../../android/app/src/main/res/font/dm_sans.ttf" Link="Fonts/dm_sans.ttf" />
     <Resource Include="../../android/app/src/main/res/font/manrope.ttf" Link="Fonts/manrope.ttf" />
     <None Include="../../android/app/src/main/assets/licenses/*-OFL.txt" Link="licenses/fonts/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

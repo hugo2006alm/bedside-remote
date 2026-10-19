@@ -52,6 +52,14 @@ The physical queue test started empty: appending a pasted official YouTube link 
 
 Physical text input initially corrupted `Bedside Remote - café, ç 😀` in Windows Notepad 11.2607.14.0: rapid Unicode packets repeated isolated low-surrogate units, and a first pacing-only candidate still failed. The final local Windows candidate uses layout keystrokes plus paced UTF-16 fallback; the user confirmed the exact phrase, including both accents and the emoji, in a fresh Notepad document. Tests used the signed Android 0.1.1 APK and preserved pairing across agent restarts. This correction and the longer Android text acknowledgement timeout are included in the installed 0.1.3 release; the short Notepad test preceded that packaged upgrade. Other editors, keyboard layouts and maximum-length physical text remain unverified.
 
+## Shared identity and connection confirmation
+
+The shared brass/charcoal mark now supplies Android adaptive/themed icons, the Android header, Windows executable/window/tray/installer, and Firefox/Edge toolbar/popup assets. The canonical SVG, generation prompt and regeneration command are in [the identity sources](../assets/brand/README.md). Android lint, 16 unit tests, debug APK and instrumentation APK compilation passed locally; instrumentation execution remains a CI check. Browser checks and all 17 tests passed, including pending native startup, invalid/valid readiness messages, manual retry and legacy-command confirmation. Native executable integration asserts readiness only after the interactive pipe connects.
+
+Windows `0.2.2-alpha.1.local` was then installed on the 144-DPI workstation: the 960 × 1050-pixel window fit the work area, showed the new mark, reopened from minimized/tray states and remained alive. All existing settings, queue, identity and device-file hashes were preserved. An initial silent installation collided with browser native-host reconnect attempts; temporarily pausing the two installed host manifests during installation resolved the file lock, and both manifests were restored. The published native executable separately emitted the exact framed readiness notice and exited successfully without desktop input.
+
+The user confirmed a lasting Edge native connection after running the repair script from ordinary PowerShell on 2026-10-19; the installed Edge-origin native process was observed separately. Earlier tooling-context checks alone were insufficient. Real Netflix Store-app playback and contextual remote control remain pending.
+
 ## Physical acceptance checklist
 
 The observations above are partial physical evidence. The following checklist remains open until all relevant cases are executed and recorded with device/browser versions:

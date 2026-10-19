@@ -275,6 +275,8 @@ try
             using var host = System.Diagnostics.Process.Start(start)!;
             try
             {
+                var ready = await ReadNative(host.StandardOutput.BaseStream);
+                Check(ready.GetProperty("version").GetInt32() == 1 && ready.GetProperty("type").GetString() == "native.ready", "Published native host confirms the agent pipe before the extension may report connected.");
                 await SendNativeState(host.StandardInput.BaseStream, "ZZZZZZZZZZZ", false);
                 var multiple = await ReadUntil(socket, x => x.GetProperty("type").GetString() == "state" && x.GetProperty("sessions").GetArrayLength() == 2);
                 var secondSession = multiple.GetProperty("sessions").EnumerateArray().Single(x => x.GetProperty("sessionId").GetString() != browserState.GetProperty("activeSessionId").GetString()).GetProperty("sessionId").GetString()!;
