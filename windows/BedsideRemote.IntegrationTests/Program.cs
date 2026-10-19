@@ -18,7 +18,7 @@ var mediaApps = new MediaApps(launchedApps.Add);
 mediaApps.Launch("youtube");
 Check(launchedApps.Single().FileName == "https://www.youtube.com/" && launchedApps.Single().UseShellExecute, "YouTube launch resolves only the fixed official destination through a simulated process launcher.");
 mediaApps.Launch("netflix");
-Check(launchedApps[1].FileName == "https://www.netflix.com/" || launchedApps[1].Arguments == @"shell:AppsFolder\4DF9E0F8.Netflix_mcm4njqhnhss8!Netflix", "Netflix resolves only its fixed official website or recognized Store identity.");
+Check(launchedApps[1].FileName == "microsoft-edge:https://www.netflix.com/" || launchedApps[1].Arguments == @"shell:AppsFolder\4DF9E0F8.Netflix_mcm4njqhnhss8!Netflix", "Netflix resolves only its fixed official Edge destination or recognized Store identity.");
 var focusBounds = new[] { new System.Windows.Rect(0, 0, 50, 50), new System.Windows.Rect(100, 0, 50, 50), new System.Windows.Rect(0, 100, 50, 50) };
 Check(DesktopNavigation.Nearest(focusBounds, 0, "right") == 1 && DesktopNavigation.Nearest(focusBounds, 0, "down") == 2 && DesktopNavigation.Nearest(focusBounds, 1, "right") == 1, "TV navigation chooses visible neighbors by direction and preserves selection at an edge.");
 var dragEvents = new List<uint>();

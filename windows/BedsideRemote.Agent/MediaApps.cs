@@ -17,7 +17,7 @@ public sealed class MediaApps(Action<ProcessStartInfo>? start = null)
             if (DateTime.UtcNow - refreshed < TimeSpan.FromSeconds(30)) return available.Values.Select(value => value.App).ToArray();
             available.Clear();
             Add("youtube", "YouTube", "https://www.youtube.com/", "browser");
-            Add("netflix", "Netflix", "https://www.netflix.com/", "browser");
+            Add("netflix", "Netflix", "microsoft-edge:https://www.netflix.com/", "browser");
             ReadStoreApps();
             Find("spotify", "Spotify", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Spotify", "Spotify.exe"));
             var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
