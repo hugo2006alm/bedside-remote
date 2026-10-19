@@ -22,6 +22,10 @@ public sealed class RemoteServer
     private readonly HashSet<Guid> recentIds = [];
     private readonly Queue<Guid> recentOrder = new();
     private WebApplication? app;
+    private readonly CancellationTokenSource shutdown = new();
+    private readonly object lifecycleLock = new();
+    private Task? stopTask;
+    private int stopping;
     public PairingWindow Pairing { get; } = new();
     public Func<string, CancellationToken, Task<bool>>? Approve { get; set; }
     public event Action? DevicesChanged;
@@ -48,17 +52,28 @@ public sealed class RemoteServer
         app = builder.Build();
         app.Use(async (context, next) =>
         {
+            if (Volatile.Read(ref stopping) != 0) { context.Response.StatusCode = 503; return; }
+            using var requestLifetime = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, shutdown.Token);
+            context.RequestAborted = requestLifetime.Token;
             if (!Protocol.IsLan(context.Connection.RemoteIpAddress) || context.Request.Headers.ContainsKey("Origin")) { context.Response.StatusCode = 403; return; }
             context.Response.Headers.CacheControl = "no-store";
             await next(context);
         });
-        app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(20) });
+        app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(20), KeepAliveTimeout = TimeSpan.FromSeconds(15) });
         app.MapGet("/health", () => new { version = 1, name = Environment.MachineName });
         app.MapPost("/pair", PairAsync);
         app.MapGet("/ws", ConnectAsync);
         await app.StartAsync(token);
     }
-    public async Task StopAsync() { Pairing.Close(); if (app != null) { await app.StopAsync(); await app.DisposeAsync(); } }
+    public Task StopAsync() { lock (lifecycleLock) return stopTask ??= StopCoreAsync(); }
+    private async Task StopCoreAsync()
+    {
+        Interlocked.Exchange(ref stopping, 1);
+        Pairing.Close();
+        shutdown.Cancel();
+        foreach (var client in clients.Values) client.Socket.Abort();
+        if (app != null) { await app.StopAsync(); await app.DisposeAsync(); }
+    }
     private async Task PairAsync(HttpContext context)
     {
         if (!await approvalLock.WaitAsync(0, context.RequestAborted)) { context.Response.StatusCode = 429; return; }
@@ -96,10 +111,12 @@ public sealed class RemoteServer
         var client = new Client(device.DeviceId, socket);
         var connectionId = Guid.NewGuid().ToString(); clients[connectionId] = client;
         lock (deviceLock)
-            if (!devices.Any(d => d.DeviceId == device.DeviceId)) { clients.TryRemove(connectionId, out _); socket.Abort(); return; }
+            if (Volatile.Read(ref stopping) != 0 || !devices.Any(d => d.DeviceId == device.DeviceId)) { clients.TryRemove(connectionId, out _); socket.Abort(); return; }
         using var connectionLifetime = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
         Task pendingBrowser = Task.CompletedTask;
         Task pendingText = Task.CompletedTask;
+        var closeStatus = WebSocketCloseStatus.NormalClosure;
+        var closeReason = "Connection ended.";
         try
         {
             await client.SendAsync(engine.Snapshot(), context.RequestAborted);
@@ -117,7 +134,7 @@ public sealed class RemoteServer
                     length += frame.Count;
                 } while (!frame.EndOfMessage);
                 if (DateTimeOffset.UtcNow - period > TimeSpan.FromSeconds(1)) { period = DateTimeOffset.UtcNow; count = 0; }
-                if (++count > 150) throw new InvalidDataException("Command rate limit exceeded.");
+                if (++count > 150) throw new CommandRateLimitException();
                 Command command;
                 try { command = Protocol.ParseCommand(buffer.AsMemory(0, length)); }
                 catch (Exception ex) when (ex is JsonException or FormatException or InvalidOperationException or KeyNotFoundException or OverflowException) { throw new InvalidDataException("Invalid command."); }
@@ -142,17 +159,19 @@ public sealed class RemoteServer
                 else pendingBrowser = DispatchBrowserAsync(client, command, connectionLifetime.Token);
             }
         }
-        catch (Exception ex) when (ex is WebSocketException or OperationCanceledException or InvalidDataException or IOException) { }
+        catch (CommandRateLimitException) { closeStatus = (WebSocketCloseStatus)1013; closeReason = "Command rate limit exceeded; reconnect and reduce input rate."; }
+        catch (InvalidDataException) { closeStatus = WebSocketCloseStatus.ProtocolError; closeReason = "Invalid protocol message."; }
+        catch (Exception ex) when (ex is WebSocketException or OperationCanceledException or IOException or ObjectDisposedException) { }
         finally
         {
             connectionLifetime.Cancel();
             await pendingBrowser;
             await pendingText;
             clients.TryRemove(connectionId, out _);
-            if (socket.State == WebSocketState.Open)
+            if (socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
             {
                 using var closeTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                try { await socket.CloseOutputAsync(WebSocketCloseStatus.PolicyViolation, "Connection ended.", closeTimeout.Token); } catch (Exception ex) when (ex is WebSocketException or OperationCanceledException) { }
+                try { await socket.CloseOutputAsync(closeStatus, closeReason, closeTimeout.Token); } catch (Exception ex) when (ex is WebSocketException or OperationCanceledException or ObjectDisposedException) { }
             }
         }
     }
@@ -202,6 +221,8 @@ public sealed class RemoteServer
         var ok = false; string? error = null;
         try
         {
+            token.ThrowIfCancellationRequested();
+            if (Volatile.Read(ref stopping) != 0) throw new OperationCanceledException(token);
             lock (deviceLock)
                 if (!devices.Any(x => x.DeviceId == client.DeviceId)) throw new InvalidOperationException("Device was revoked.");
             await engine.ExecuteAsync(command, token); ok = true;
@@ -231,6 +252,7 @@ public sealed class RemoteServer
         try { await client.SendAsync(snapshot, timeout.Token); }
         catch (Exception ex) when (ex is WebSocketException or OperationCanceledException or ObjectDisposedException) { client.Socket.Abort(); }
     }
+    private sealed class CommandRateLimitException : IOException;
     private sealed class Client(string deviceId, WebSocket socket)
     {
         public string DeviceId { get; } = deviceId;

@@ -2,6 +2,8 @@
 
 The .NET 10 LTS WPF agent runs in the signed-in user's interactive session, with a notification-area icon. It needs neither a Windows Service nor administrator rights. Closing its window keeps remote control available; **Exit** in the notification-area menu stops it.
 
+The compact charcoal, ivory and brass window shares Android’s DM Sans/Manrope fonts and rounded surfaces. It fits the current monitor’s work area at its DPI; cards scroll while the header/footer remain reachable. Preferences and secondary network addresses expand on demand. Launching it again restores the existing window, including after closing it to the tray. Explicit PerMonitorV2 awareness handles monitor scaling; process-local software rendering keeps this small utility visible in graphics/remote-session configurations that produced a blank WPF client.
+
 ## Build and validate
 
 Install the .NET 10.0.402 SDK on Windows, matching the repository's `global.json`. From the repository root:
@@ -29,7 +31,7 @@ The published `licenses/` directory contains the dependency and runtime notices 
 
 ## Pairing and browser integration
 
-1. Open **Pair an Android device**. First copy the SHA-256 fingerprint into Android to verify the PC's TLS identity. Then enter the six-digit pairing code.
+1. Open **Pair a phone**. First copy the SHA-256 fingerprint into Android to verify the PC's TLS identity. Then enter the six-digit pairing code.
 2. Approve the named Android device in the separate Windows prompt. Pairing expires after five minutes, allows ten code checks per window and requires approval within 45 seconds. Approved attempts consume two checks to verify that the window has not expired during local approval.
 3. Install the Zen/Firefox extension separately. The installer writes its Native Messaging manifest and registers `com.bedside.remote` under the current user's Mozilla host key. No manual Registry changes are needed. Firefox launches the same executable with the manifest path and authorized extension ID; `--native bedside-remote@hugo2006alm` is also supported. Diagnostics never go to native stdout.
 

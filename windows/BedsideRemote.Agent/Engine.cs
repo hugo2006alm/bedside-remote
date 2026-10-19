@@ -11,6 +11,7 @@ public sealed class Engine
     private static readonly SemaphoreSlim DesktopSync = new(1);
     private readonly SemaphoreSlim browserCommands = new(1);
     private readonly PlaybackQueue queue;
+    private string persistedQueue;
     private readonly Dictionary<string, NativeConnection> native = [];
     private string? activeSession;
     private string? browserError;
@@ -23,6 +24,7 @@ public sealed class Engine
         this.storage = storage;
         this.desktopInput = desktopInputAsync ?? (desktopInput == null ? DesktopInput.ExecuteAsync : (command, _) => { desktopInput(command); return Task.CompletedTask; });
         queue = new(storage.Read<QueueSnapshot>("queue.json"));
+        persistedQueue = JsonSerializer.Serialize(queue.Snapshot(), Protocol.Json);
     }
     public object Snapshot()
     {
@@ -260,8 +262,15 @@ public sealed class Engine
         }
     }
     private void SetError(string error) { lock (sync) browserError = error; Changed?.Invoke(); }
-    private void EnsureExtension() { if (native.Count == 0) throw new InvalidOperationException("Connect the optional Zen/Firefox extension for browser actions."); }
-    private void PersistQueue() => storage.Save("queue.json", queue.Snapshot());
+    private void EnsureExtension() { if (native.Count == 0) throw new InvalidOperationException("Connect the browser companion: Zen/Firefox for YouTube, or Edge for the Netflix Store app."); }
+    private void PersistQueue()
+    {
+        var snapshot = queue.Snapshot();
+        var serialized = JsonSerializer.Serialize(snapshot, Protocol.Json);
+        if (serialized == persistedQueue) return;
+        storage.Save("queue.json", snapshot);
+        persistedQueue = serialized;
+    }
     private void ClearPending() { pendingVideoId = null; pendingConnectionId = null; pendingTabId = null; }
     private static string Shorten(string text, int length) => text.Length <= length ? text : text[..length];
     private static string SessionId(NativeConnection connection, JsonElement tab) => $"{connection.Id}:{tab.GetProperty("tabId").GetInt32()}";

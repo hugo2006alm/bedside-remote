@@ -29,6 +29,12 @@ data class AppState(
     val reducedMotion: Boolean = false,
     val lightTheme: Boolean = false,
     val sensitivity: Float = 1.5f,
+    val textPending: Boolean = false,
+    val textAccepted: Long = 0,
+    val videoPending: Boolean = false,
+    val videoAccepted: Long = 0,
+    val videoAcceptedUrl: String? = null,
+    val endpointSaving: Boolean = false,
 ) {
     val connected: Boolean
         get() = status == ConnectionStatus.CONNECTED
@@ -39,6 +45,8 @@ data class AppState(
 
 class RemoteViewModel(application: Application) : AndroidViewModel(application) {
     private val store = SecureStore(application)
+    private val computers = ComputerRepository(store::computers, store::save)
+    private var submittedVideo: String? = null
     private val mutableState = MutableStateFlow(AppState())
     val state = mutableState.asStateFlow()
     private var foreground = false
@@ -57,15 +65,31 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
             },
             onState = { remote -> mutableState.update { it.copy(remote = remote) } },
             onError = { error -> mutableState.update { it.copy(error = error) } },
-            onAccepted = { action ->
-                if (action == "youtube.enqueue")
-                    mutableState.update {
-                        it.copy(
-                            notice =
-                                "Video accepted by your computer. Check playback for autoplay restrictions.",
-                            sharedUrl = null,
-                        )
+            onAccepted = {},
+            onResult = { _, action, ok ->
+                mutableState.update {
+                    when (action) {
+                        "input.text" ->
+                            it.copy(
+                                textPending = false,
+                                textAccepted = it.textAccepted + if (ok) 1 else 0,
+                            )
+                        "youtube.enqueue" ->
+                            it.copy(
+                                videoPending = false,
+                                videoAccepted = it.videoAccepted + if (ok) 1 else 0,
+                                videoAcceptedUrl = if (ok) submittedVideo else it.videoAcceptedUrl,
+                                sharedUrl =
+                                    if (ok && it.sharedUrl == submittedVideo) null
+                                    else it.sharedUrl,
+                                notice =
+                                    if (ok)
+                                        "Video accepted by your computer. Check playback for autoplay restrictions."
+                                    else it.notice,
+                            )
+                        else -> it
                     }
+                }
             },
         )
     private val discovery =
@@ -76,9 +100,9 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         )
 
     init {
-        viewModelScope.launch(Dispatchers.IO) {
-            runCatching { store.computers() }
-                .onSuccess { devices ->
+        viewModelScope.launch {
+            try {
+                computers.load { devices ->
                     mutableState.update {
                         it.copy(
                             computers = devices,
@@ -89,18 +113,15 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
                             sensitivity = store.sensitivity,
                         )
                     }
-                    withContext(Dispatchers.Main) {
-                        if (foreground) devices.firstOrNull()?.let(transport::connect)
-                    }
                 }
-                .onFailure { failure ->
-                    mutableState.update {
-                        it.copy(
-                            error =
-                                "Stored pairing credentials cannot be opened. Clear app storage and pair again. ${failure.javaClass.simpleName}"
-                        )
-                    }
-                }
+                if (foreground) mutableState.value.selected?.let(transport::connect)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                showError(
+                    "Stored pairing credentials cannot be opened. Clear app storage and pair again. ${failure.javaClass.simpleName}"
+                )
+            }
         }
     }
 
@@ -123,26 +144,71 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
 
     fun forget(computer: PairedComputer) =
         viewModelScope.launch {
-            val remaining =
-                mutableState.value.computers.filterNot { it.deviceId == computer.deviceId }
             try {
-                withContext(Dispatchers.IO) { store.save(remaining) }
-                val selected = mutableState.value.selectedId == computer.deviceId
-                if (selected) transport.disconnect()
-                mutableState.update {
-                    it.copy(
-                        computers = remaining,
-                        selectedId =
-                            if (selected) remaining.firstOrNull()?.deviceId else it.selectedId,
-                        notice =
-                            "Computer forgotten on this phone. Revoke the phone in the Windows app to invalidate its token.",
-                    )
-                }
-                if (selected && foreground) remaining.firstOrNull()?.let(transport::connect)
+                computers.update(
+                    { current -> current.filterNot { it.deviceId == computer.deviceId } },
+                    { remaining ->
+                        val selected = mutableState.value.selectedId == computer.deviceId
+                        if (selected) transport.disconnect()
+                        mutableState.update {
+                            it.copy(
+                                computers = remaining,
+                                selectedId =
+                                    if (selected) remaining.firstOrNull()?.deviceId
+                                    else it.selectedId,
+                                notice =
+                                    "Computer forgotten on this phone. Revoke the phone in the Windows app to invalidate its token.",
+                            )
+                        }
+                        if (selected && foreground) remaining.firstOrNull()?.let(transport::connect)
+                    },
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
                 showError(error.message ?: "Could not forget computer")
             }
         }
+
+    fun updateEndpoint(computer: PairedComputer, host: String, port: String) {
+        if (mutableState.value.endpointSaving) return
+        mutableState.update { it.copy(endpointSaving = true, error = null) }
+        viewModelScope.launch {
+            try {
+                val updated = computer.copy(host = host.trim(), port = port.toIntOrNull() ?: 0)
+                LocalEndpoint.baseUrl(updated.host, updated.port)
+                transport.verifyEndpoint(updated)
+                computers.update(
+                    { current ->
+                        require(current.any { it.deviceId == computer.deviceId }) {
+                            "Computer was forgotten. Pair it again."
+                        }
+                        current.map {
+                            if (it.deviceId == computer.deviceId)
+                                it.copy(host = updated.host, port = updated.port)
+                            else it
+                        }
+                    },
+                    { saved ->
+                        mutableState.update {
+                            it.copy(
+                                computers = saved,
+                                notice = "Computer address verified and saved",
+                            )
+                        }
+                        if (foreground && mutableState.value.selectedId == computer.deviceId)
+                            saved.first { it.deviceId == computer.deviceId }.let(transport::connect)
+                    },
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                showError(error.message?.take(300) ?: "Could not verify the new address")
+            } finally {
+                mutableState.update { it.copy(endpointSaving = false) }
+            }
+        }
+    }
 
     fun pair(host: String, port: String, fingerprint: String, code: String, verified: Boolean) {
         if (mutableState.value.pairing) return
@@ -172,20 +238,25 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
                                 Build.MODEL.take(80),
                             )
                         }
-                    val devices =
-                        mutableState.value.computers.filterNot {
-                            it.host == computer.host && it.port == computer.port
-                        } + computer
-                    withContext(Dispatchers.IO) { store.save(devices) }
-                    mutableState.update {
-                        it.copy(
-                            computers = devices,
-                            selectedId = computer.deviceId,
-                            pairing = false,
-                            notice = "Computer paired securely",
-                        )
-                    }
-                    if (foreground) transport.connect(computer)
+                    computers.update(
+                        { current ->
+                            current.filterNot {
+                                it.fingerprint == computer.fingerprint ||
+                                    (it.host == computer.host && it.port == computer.port)
+                            } + computer
+                        },
+                        { saved ->
+                            mutableState.update {
+                                it.copy(
+                                    computers = saved,
+                                    selectedId = computer.deviceId,
+                                    pairing = false,
+                                    notice = "Computer paired securely",
+                                )
+                            }
+                            if (foreground) transport.connect(computer)
+                        },
+                    )
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
@@ -256,12 +327,14 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun text(value: String) {
-        if (value.isBlank()) return
+        if (value.isBlank() || mutableState.value.textPending) return
         if (value.length > 4096) {
             showError("Send up to 4096 characters at a time")
             return
         }
-        command("input.text", "text" to JsonPrimitive(value))
+        mutableState.update { it.copy(textPending = true) }
+        if (command("input.text", "text" to JsonPrimitive(value)) == null)
+            mutableState.update { it.copy(textPending = false) }
     }
 
     fun pointer(dx: Float, dy: Float) {
@@ -282,13 +355,23 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun enqueue(url: String, mode: String) {
+        if (mutableState.value.videoPending) return
         val canonical =
             YoutubeLinks.canonical(url)
                 ?: run {
                     showError("Enter a valid official HTTPS YouTube video link")
                     return
                 }
-        command("youtube.enqueue", "url" to JsonPrimitive(canonical), "mode" to JsonPrimitive(mode))
+        submittedVideo = canonical
+        mutableState.update { it.copy(videoPending = true) }
+        if (
+            command(
+                "youtube.enqueue",
+                "url" to JsonPrimitive(canonical),
+                "mode" to JsonPrimitive(mode),
+            ) == null
+        )
+            mutableState.update { it.copy(videoPending = false) }
     }
 
     fun queue(action: String) {

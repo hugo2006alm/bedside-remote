@@ -8,6 +8,8 @@ Conventional Commits control versioning: `fix:`/`perf:` increment patch, `feat:`
 
 Default channel is alpha. Repository variable `RELEASE_CHANNEL` can be `alpha`, `beta` or `stable`. Only set `PHYSICAL_VALIDATION_APPROVED=true` after recording actual device/browser installation, pairing, playback and update results. Stable publication refuses missing distribution signatures or unrecorded physical validation. `workflow_dispatch` provides an exceptional manual run; `publish=true` requests a patch increment even without an eligible commit.
 
+AMO signing waits for Android, Windows and quality checks, because Mozilla consumes an immutable numeric version. If signing succeeds but a later release/upload fails, do not repeatedly resubmit that same version. Run **Verify and release** manually on main with `publish=true` and `release_version` set to an unused higher core version (for example, skip a consumed `0.2.1-alpha.1` with `0.2.2-alpha.1`). The override is validated against the calculated version and published tags, and stamps every component consistently. Increment the core version, not just the prerelease suffix: Firefox strips that suffix. Keep the failed run as evidence; never delete or rewrite a published tag to reuse its version.
+
 Build-time version inputs stamp all artifacts consistently. Firefox requires a numeric add-on version, so its manifest uses the extension's documented SemVer mapping. Android release versionCode uses the release workflow run number. Do not reset it or replace the distribution key when updating installed clients.
 
 ## Signing configuration

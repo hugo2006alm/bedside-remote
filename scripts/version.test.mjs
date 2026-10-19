@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateRelease, compareVersions, parseVersion } from './version.mjs';
+import { calculateRelease, compareVersions, parseVersion, overrideRelease } from './version.mjs';
 
 test('bootstrap eligible changes into an explicitly unstable initial version', () => {
   assert.equal(calculateRelease([], ['feat: universal remote']).version, '0.1.0-alpha.1');
@@ -25,4 +25,12 @@ test('tags are sorted numerically and unrelated tags ignored', () => {
 test('stable is explicit and manual publishing still increments', () => {
   assert.equal(calculateRelease(['v1.0.0'], [], 'stable', true).version, '1.0.1');
   assert.throws(() => calculateRelease([], ['feat: x'], 'nightly'));
+});
+
+test('manual recovery skips an externally consumed AMO version without accepting old or malformed tags', () => {
+  const result = calculateRelease(['v0.2.0-alpha.1'], ['fix: transport']);
+  assert.equal(overrideRelease(result, '0.2.2-alpha.1').version, '0.2.2-alpha.1');
+  assert.equal(overrideRelease(result, '').version, '0.2.1-alpha.1');
+  for (const version of ['0.2.0-alpha.1', 'v0.2.2-alpha.1', 'invalid', '0.1.9', '00.2.2-alpha.1', '0.2.2-alpha.01'])
+    assert.throws(() => overrideRelease(result, version));
 });
