@@ -14,7 +14,7 @@
     <None Include="../../android/app/src/main/assets/licenses/*-OFL.txt" Link="licenses/fonts/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../BedsideRemote.Core/BedsideRemote.Core.csproj" />
-    <PackageReference Include="Haukcode.Mdns" Version="1.0.21" />
+    <PackageReference Include="Haukcode.Mdns" Version="1.0.22" />
     <None Include="../licenses/**/*" Link="licenses/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="../../LICENSE" Link="LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <InternalsVisibleTo Include="BedsideRemote.IntegrationTests" />
