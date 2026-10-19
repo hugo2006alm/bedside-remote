@@ -27,14 +27,14 @@ class RemoteAccessibilityTest {
                 )
             }
         }
-        compose.onNode(hasSetTextAction()).performTextInput("Keep café 😀")
+        compose.onNodeWithText("Text to send").performTextInput("Keep café 😀")
         compose.onNodeWithText("Send text").performClick()
-        compose.onNode(hasSetTextAction()).assertTextContains("Keep café 😀")
+        compose.onNodeWithText("Text to send").assertTextContains("Keep café 😀")
         compose.runOnIdle { state.value = state.value.copy(textPending = false, error = "Busy") }
-        compose.onNode(hasSetTextAction()).assertTextContains("Keep café 😀")
+        compose.onNodeWithText("Text to send").assertTextContains("Keep café 😀")
         compose.runOnIdle { state.value = state.value.copy(textAccepted = 1) }
         compose
-            .onNode(hasSetTextAction())
+            .onNodeWithText("Text to send")
             .assert(
                 SemanticsMatcher.expectValue(
                     androidx.compose.ui.semantics.SemanticsProperties.EditableText,
