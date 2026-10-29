@@ -14,11 +14,11 @@ public static class Program
     public static int Main(string[] args)
     {
         if (NativeBridge.IsNativeInvocation(args)) return NativeBridge.RunHostAsync(args).GetAwaiter().GetResult();
-        if (args.Length != 0) return 2;
+        if (!WindowsStartup.IsValidInvocation(args)) return 2;
         var user = WindowsIdentity.GetCurrent().User!.Value;
         using var activation = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\BedsideRemote-Activate-" + user);
         using var mutex = new Mutex(true, "Local\\BedsideRemote-" + user, out var created);
-        if (!created) { activation.Set(); return 0; }
+        if (!created) { if (!WindowsStartup.IsStartup(args)) activation.Set(); return 0; }
         // This lightweight tray UI must also render reliably with remote sessions and GPU drivers.
         System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         var application = new System.Windows.Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
@@ -32,11 +32,11 @@ public static class Program
             var window = new MainWindow(storage, settings, server, fingerprint);
             var activationWait = ThreadPool.RegisterWaitForSingleObject(activation, (_, _) => window.Dispatcher.BeginInvoke(window.OpenWindow), null, Timeout.Infinite, false);
             MdnsAdvertiser? discovery = null;
-            var started = false;
-            window.Loaded += async (_, _) =>
+            application.Startup += async (_, _) =>
             {
-                if (started) return;
-                started = true;
+                if (!WindowsStartup.ShouldStartHidden(args, settings)) window.OpenWindow();
+                try { WindowsStartup.RefreshExistingRegistration(); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException) { window.SetStatus("Could not refresh Windows startup registration. Check Preferences.", true); }
                 try
                 {
                     await server.StartAsync(settings.Port, certificate, cancellation.Token);
@@ -57,7 +57,7 @@ public static class Program
                 cancellation.Cancel(); discovery?.Dispose();
                 await server.StopAsync(); application.Shutdown();
             };
-            try { application.Run(window); }
+            try { application.Run(); }
             finally { activationWait.Unregister(null); }
             return 0;
         }

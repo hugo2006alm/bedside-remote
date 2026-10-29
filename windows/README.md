@@ -2,6 +2,15 @@
 
 The .NET 10 LTS WPF agent runs in the signed-in user's interactive session, with a notification-area icon. It needs neither a Windows Service nor administrator rights. Closing its window keeps remote control available; **Exit** in the notification-area menu stops it.
 
+Expand **Preferences** to choose **Start after Windows sign-in** and **Start
+minimized** independently. The second checkbox hides the window in the tray at
+sign-in; remote control and browser integration still start. Shortcuts and the
+tray icon open the window. Both settings persist locally across updates, with
+startup disabled and a visible login window by default. Existing settings keep
+their startup choice. Login registration uses a quoted executable path plus
+`--startup`; the next launch refreshes existing legacy registrations. Duplicate
+login launches never raise an already running window.
+
 The compact charcoal, ivory and brass window shares Android’s DM Sans/Manrope fonts and rounded surfaces. It fits the current monitor’s work area at its DPI; cards scroll while the header/footer remain reachable. Preferences and secondary network addresses expand on demand. Launching it again restores the existing window, including after closing it to the tray. Explicit PerMonitorV2 awareness handles monitor scaling; process-local software rendering keeps this small utility visible in graphics/remote-session configurations that produced a blank WPF client.
 
 The executable, window, notification area and installer use the same [minimal application mark](../assets/brand/README.md) as Android and both browser companions. Generated ICO frames cover small tray sizes through high-DPI window/installer rendering.

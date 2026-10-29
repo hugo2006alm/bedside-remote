@@ -1,5 +1,18 @@
 # Validation
 
+## Windows startup preferences — 2026-10-29
+
+Local .NET 10.0.402 Release build and formatting checks pass, with 99 core
+checks, 93 Windows integration checks, and 20 release-tooling tests. New checks
+exercise all saved startup/minimized combinations, legacy JSON defaults,
+startup-only visibility, strict invocation arguments, a real isolated HKCU
+registration (including paths with spaces, disabling, and failed-save rollback),
+and the actual WPF minimized checkbox with persisted port/startup preservation.
+No test changes the user's real login registration or sends desktop input.
+The server now starts from application startup independently of window loading,
+so a hidden launch still starts TLS, discovery and browser integration.
+Full Windows sign-out/reboot acceptance remains a manual check.
+
 Automated checks, integration checks and physical validation are separate evidence. Passing a fixture test or build does not establish streaming compatibility.
 
 ## Automated checks
