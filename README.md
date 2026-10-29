@@ -26,6 +26,11 @@ Complementary work belongs in [the roadmap](docs/roadmap.md). See [the implement
 Download matching artifacts from [GitHub Releases](https://github.com/hugo2006alm/bedside-remote/releases). Check `release-manifest.json` and release notes before choosing a development build; verify file hashes against `SHA256SUMS.txt`.
 
 1. **Windows:** run the x64 setup executable for your Windows user, then start Bedside Remote. The installer registers the Native Messaging host under your user account. Allow network access only on trusted private networks if Windows Firewall asks. The app normally needs no administrator privileges. System tray keeps the agent running; startup after login is optional.
+   Expand **Preferences** for independent **Start after Windows sign-in** and
+   **Start minimized** checkboxes. Choose a visible window or system tray launch
+   at sign-in; opening the shortcut or tray icon shows the window. Choices stay
+   on this PC and survive updates. Existing installations keep their visible
+   login window until Start minimized is enabled.
 2. **Android:** install the APK, allowing installation from the download source when Android prompts. A development APK uses a debug key; distribution updates require the same persistent signing key. If Android refuses a differently signed update, uninstalling loses saved phone pairings.
 3. **Extension:** for a signed XPI, use Firefox/Zen's add-on manager, **Install Add-on From File**. For the development ZIP, extract it and temporarily load its manifest through `about:debugging#/runtime/this-firefox`; this is temporary developer loading, not signed installation. Reload existing player pages and approve the required site access. Inspect connection/target status from the extension popup.
 

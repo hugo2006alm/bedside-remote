@@ -67,4 +67,4 @@ public sealed class Storage
     }
 }
 
-public sealed record Settings(int Port = 8765, bool Startup = false);
+public sealed record Settings(int Port = 8765, bool Startup = false, bool StartMinimized = false);

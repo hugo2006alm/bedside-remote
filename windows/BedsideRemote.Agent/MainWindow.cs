@@ -8,7 +8,6 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using BedsideRemote.Core;
-using Microsoft.Win32;
 using Button = System.Windows.Controls.Button;
 using CheckBox = System.Windows.Controls.CheckBox;
 using ListBox = System.Windows.Controls.ListBox;
@@ -104,14 +103,27 @@ public sealed class MainWindow : Window
         {
             try
             {
-                using var key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
-                if (startup.IsChecked == true) key.SetValue("BedsideRemote", "\"" + Environment.ProcessPath + "\"");
-                else key.DeleteValue("BedsideRemote", false);
-                this.settings = this.settings with { Startup = startup.IsChecked == true }; storage.Save("settings.json", this.settings);
+                var updated = this.settings with { Startup = startup.IsChecked == true };
+                WindowsStartup.Save(storage, updated); this.settings = updated;
+                SetStatus("Windows startup preference saved.", false);
             }
-            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException) { startup.IsChecked = this.settings.Startup; SetStatus("Could not update startup settings.", true); }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or System.Security.SecurityException) { startup.IsChecked = this.settings.Startup; SetStatus("Could not update startup settings.", true); }
         };
-        options.Children.Add(startup); options.Children.Add(Text("Connection port", 13, Muted));
+        options.Children.Add(startup);
+        var minimized = new CheckBox { Content = "Start minimized", IsChecked = settings.StartMinimized, Foreground = Ivory, Margin = new Thickness(0, 0, 0, 4), MinHeight = 32, VerticalContentAlignment = VerticalAlignment.Center };
+        minimized.Click += (_, _) =>
+        {
+            try
+            {
+                var updated = this.settings with { StartMinimized = minimized.IsChecked == true };
+                storage.Save("settings.json", updated); this.settings = updated;
+                SetStatus("Startup window preference saved.", false);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException) { minimized.IsChecked = this.settings.StartMinimized; SetStatus("Could not save the startup window preference.", true); }
+        };
+        options.Children.Add(minimized);
+        options.Children.Add(Text("At Windows sign-in, stay in the system tray. Open Bedside Remote from the tray or shortcut.", 12, Muted));
+        options.Children.Add(Text("Connection port", 13, Muted, 16));
         var portRow = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
         var port = new TextBox { Text = settings.Port.ToString(System.Globalization.CultureInfo.InvariantCulture), Width = 88, Margin = new Thickness(0, 0, 12, 0), VerticalContentAlignment = VerticalAlignment.Center };
         AutomationProperties.SetName(port, "Connection port, 1024 to 65535"); portRow.Children.Add(port);

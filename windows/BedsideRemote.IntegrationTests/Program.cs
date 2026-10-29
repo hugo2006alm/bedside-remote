@@ -10,6 +10,7 @@ using System.Text;
 using System.Text.Json;
 using BedsideRemote.Agent;
 using BedsideRemote.Core;
+using Microsoft.Win32;
 
 var checks = 0;
 void Check(bool condition, string message) { if (!condition) throw new Exception(message); checks++; }
@@ -109,6 +110,35 @@ var blockText = false;
 var textStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 var textStopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 var storage = new Storage(root);
+var legacySettings = JsonSerializer.Deserialize<Settings>("{\"port\":9123,\"startup\":true}", Protocol.Json)!;
+Check(legacySettings.Port == 9123 && legacySettings.Startup && !legacySettings.StartMinimized, "Existing settings keep their port, startup preference and visible-login default.");
+foreach (var startupEnabled in new[] { false, true })
+{
+    foreach (var minimized in new[] { false, true })
+    {
+        var preferences = new Settings(9123, startupEnabled, minimized);
+        storage.Save("startup-test.json", preferences);
+        Check(storage.Read<Settings>("startup-test.json") == preferences, "Startup and minimized choices persist independently.");
+        Check(WindowsStartup.ShouldStartHidden(new[] { "--startup" }, preferences) == minimized && !WindowsStartup.ShouldStartHidden(Array.Empty<string>(), preferences), "Only a Windows login launch can hide the window; manual opens stay visible.");
+    }
+}
+Check(WindowsStartup.IsValidInvocation(Array.Empty<string>()) && WindowsStartup.IsValidInvocation(new[] { "--startup" }) && !WindowsStartup.IsValidInvocation(new[] { "--startup", "unexpected" }) && !WindowsStartup.IsValidInvocation(new[] { "--unknown" }), "Startup invocation accepts exactly its fixed flag or a normal launch.");
+var startupKeyPath = @"Software\BedsideRemote-StartupTests-" + Guid.NewGuid().ToString("N");
+try
+{
+    using var startupKey = Registry.CurrentUser.CreateSubKey(startupKeyPath);
+    var startupStorage = new Storage(Path.Combine(root, "startup"));
+    const string executable = @"C:\Program Files\Bedside Remote\BedsideRemote.exe";
+    WindowsStartup.Save(startupStorage, new Settings(9123, true, true), startupKey, executable);
+    Check((string?)startupKey.GetValue("BedsideRemote") == "\"" + executable + "\" --startup", "Login registration quotes executable paths with spaces and includes the startup flag.");
+    WindowsStartup.Save(startupStorage, new Settings(9123, false, true), startupKey, executable);
+    Check(startupKey.GetValue("BedsideRemote") is null && startupStorage.Read<Settings>("settings.json") == new Settings(9123, false, true), "Disabling login removes registration while retaining the minimized choice and port.");
+    startupKey.SetValue("BedsideRemote", "legacy-registration");
+    Directory.CreateDirectory(Path.Combine(startupStorage.Root, "settings.json.tmp"));
+    try { WindowsStartup.Save(startupStorage, new Settings(9123, true), startupKey, executable); throw new Exception("Failed settings write was accepted."); }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Check((string?)startupKey.GetValue("BedsideRemote") == "legacy-registration" && startupStorage.Read<Settings>("settings.json") == new Settings(9123, false, true), "Failed persistence restores the previous login registration and saved settings."); }
+}
+finally { Registry.CurrentUser.DeleteSubKeyTree(startupKeyPath, false); }
 var engine = new Engine(storage, desktopInputAsync: async (command, cancellation) =>
 {
     if (blockText && command.Action == "input.text")
@@ -370,30 +400,47 @@ try
         Check(injectedInputs == before && server.ActiveConnections == 0, "Exit promptly cancels active text and closes existing authenticated sockets; repeated stop is safe.");
     }
     var previewArgument = args.FirstOrDefault(x => x.StartsWith("--preview=", StringComparison.Ordinal));
-    if (previewArgument != null)
     {
         Exception? renderError = null;
-        var previewPath = Path.GetFullPath(previewArgument["--preview=".Length..]);
+        var previewPath = previewArgument is null ? null : Path.GetFullPath(previewArgument["--preview=".Length..]);
         var render = new Thread(() =>
         {
             try
             {
                 var application = new System.Windows.Application();
                 var window = new MainWindow(storage, new Settings(port), server, Convert.ToHexString(pin));
+                Check(!window.IsVisible, "Constructing the tray window does not display or activate it.");
+                IEnumerable<System.Windows.DependencyObject> Descendants(System.Windows.DependencyObject parent)
+                {
+                    foreach (var child in System.Windows.LogicalTreeHelper.GetChildren(parent).OfType<System.Windows.DependencyObject>())
+                    {
+                        yield return child;
+                        foreach (var nested in Descendants(child)) yield return nested;
+                    }
+                }
+                var checkboxes = Descendants(window).OfType<System.Windows.Controls.CheckBox>().ToArray();
+                var startupCheckbox = checkboxes.Single(item => Equals(item.Content, "Start after Windows sign-in"));
+                var minimizedCheckbox = checkboxes.Single(item => Equals(item.Content, "Start minimized"));
+                minimizedCheckbox.IsChecked = true;
+                minimizedCheckbox.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                Check(startupCheckbox.IsChecked == false && storage.Read<Settings>("settings.json") == new Settings(port, false, true), "Actual WPF minimized checkbox saves independently without enabling login startup or changing the port.");
+                minimizedCheckbox.IsChecked = false;
+                minimizedCheckbox.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                Check(storage.Read<Settings>("settings.json") == new Settings(port), "Actual WPF checkbox can restore a visible login window.");
                 window.SetStatus("Ready · encrypted local control", false);
                 window.BeginAnimation(System.Windows.UIElement.OpacityProperty, null); window.Opacity = 1;
                 var visual = (System.Windows.FrameworkElement)window.Content;
                 visual.Measure(new System.Windows.Size(620, 790)); visual.Arrange(new System.Windows.Rect(0, 0, 620, 790)); visual.UpdateLayout();
                 var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(620, 790, 96, 96, System.Windows.Media.PixelFormats.Pbgra32); bitmap.Render(visual);
                 var png = new System.Windows.Media.Imaging.PngBitmapEncoder(); png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
-                Directory.CreateDirectory(Path.GetDirectoryName(previewPath)!); using var output = File.Create(previewPath); png.Save(output);
+                if (previewPath is not null) { Directory.CreateDirectory(Path.GetDirectoryName(previewPath)!); using var output = File.Create(previewPath); png.Save(output); }
                 application.Shutdown();
             }
             catch (Exception ex) { renderError = ex; }
         });
         render.SetApartmentState(ApartmentState.STA); render.Start(); render.Join();
         if (renderError != null) throw renderError;
-        Check(File.Exists(previewPath), "Actual WPF layout rendered offscreen.");
+        if (previewPath is not null) Check(File.Exists(previewPath), "Actual WPF layout rendered offscreen.");
     }
     Console.WriteLine($"PASS: {checks} Windows integration checks. Real pinned TLS/HTTPS/WSS, DPAPI, named pipe, pairing, browser/queue dispatch and revocation. No desktop input injected.");
 
