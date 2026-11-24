@@ -1,6 +1,8 @@
 package com.bedside.remote
 
+import android.graphics.Bitmap
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsEnabled
@@ -8,6 +10,8 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.test.platform.app.InstrumentationRegistry
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -28,6 +32,73 @@ class RemoteAccessibilityTest {
         compose.onNodeWithContentDescription("Open keyboard").assertIsDisplayed()
         compose.onNodeWithContentDescription("Move up").assertDoesNotExist()
         compose.onNodeWithText("Touch").assertDoesNotExist()
+    }
+
+    @Test
+    fun captureRemoteWithAndWithoutContextualPlayback() {
+        val current = mutableStateOf(AppState())
+        val light = mutableStateOf(false)
+        compose.setContent {
+            BedsideTheme(light.value) { RemoteContent(current.value, RemoteActions()) }
+        }
+        val connected = AppState(status = ConnectionStatus.CONNECTED)
+        val youtube =
+            Playback(
+                platform = "youtube",
+                tabId = 1,
+                title = "A quiet evening",
+                paused = false,
+                position = 318.0,
+                duration = 1200.0,
+                ended = false,
+                capabilities = listOf("playPause", "seek", "fullscreen"),
+            )
+        val netflix = youtube.copy(platform = "netflix", title = "Evening series · Episode 3")
+        val netflixActions =
+            netflix.copy(
+                capabilities = netflix.capabilities + listOf("skipIntro", "nextEpisode", "audio")
+            )
+        val scenarios =
+            listOf(
+                Triple("disconnected", AppState(), null),
+                Triple("idle", connected, null),
+                Triple("youtube", connected, youtube),
+                Triple("netflix", connected, netflix),
+                Triple("netflix-actions", connected, netflixActions),
+            )
+        val output = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")
+        for (lightMode in listOf(false, true)) {
+            for ((name, base, playback) in scenarios) {
+                compose.runOnIdle {
+                    light.value = lightMode
+                    current.value =
+                        base.copy(
+                            remote =
+                                RemoteState(
+                                    extensionConnected = playback != null,
+                                    playback = playback,
+                                )
+                        )
+                }
+                compose
+                    .onNodeWithContentDescription("Computer trackpad", substring = true)
+                    .assertIsDisplayed()
+                if (playback != null) {
+                    compose.onNodeWithContentDescription("Pause browser").assertIsDisplayed()
+                    compose.onNodeWithContentDescription("Toggle fullscreen").assertIsDisplayed()
+                }
+                if (playback == netflixActions)
+                    compose.onNodeWithText("Skip intro").assertIsDisplayed()
+                if (output != null) {
+                    val theme = if (lightMode) "light" else "dark"
+                    val directory = File(output).apply { mkdirs() }
+                    val screenshot = compose.onRoot().captureToImage().asAndroidBitmap()
+                    File(directory, "remote-$theme-$name.png").outputStream().use {
+                        screenshot.compress(Bitmap.CompressFormat.PNG, 100, it)
+                    }
+                }
+            }
+        }
     }
 
     @Test
