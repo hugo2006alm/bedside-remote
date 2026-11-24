@@ -362,12 +362,12 @@ private fun RemoteScreen(state: AppState, actions: RemoteActions, onKeyboard: ()
 @Composable
 private fun SecondaryControls(state: AppState, actions: RemoteActions) {
     var browserNavigation by rememberSaveable { mutableStateOf(false) }
-    val browserTarget = browserNavigation && state.remote.activeSessionId != null
+    val hasBrowserTarget = state.remote.activeSessionId != null
     Column(
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (state.remote.activeSessionId != null) {
+        if (hasBrowserTarget || browserNavigation) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 FilterChip(
                     selected = !browserNavigation,
@@ -376,6 +376,7 @@ private fun SecondaryControls(state: AppState, actions: RemoteActions) {
                 )
                 FilterChip(
                     selected = browserNavigation,
+                    enabled = hasBrowserTarget,
                     onClick = { browserNavigation = true },
                     label = {
                         Text(
@@ -386,7 +387,10 @@ private fun SecondaryControls(state: AppState, actions: RemoteActions) {
                 )
             }
         }
-        DPad(state.connected, if (browserTarget) actions.navigate else actions.desktopNavigate)
+        DPad(
+            state.connected && (!browserNavigation || hasBrowserTarget),
+            if (browserNavigation) actions.navigate else actions.desktopNavigate,
+        )
         TextButton(onClick = { actions.key("home") }, enabled = state.connected) {
             Text("Windows Start")
         }
@@ -622,10 +626,8 @@ internal fun PlaybackPanel(state: AppState, actions: RemoteActions) {
             ) {
                 var expanded by remember { mutableStateOf(false) }
                 Box {
-                    TextButton(onClick = { expanded = true }) {
-                        Icon(Icons.Rounded.Tab, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Choose browser tab")
+                    IconButton(onClick = { expanded = true }, enabled = state.connected) {
+                        Icon(Icons.Rounded.Tab, "Choose browser tab")
                     }
                     DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
                         state.remote.sessions.forEach { session ->
@@ -651,7 +653,12 @@ internal fun PlaybackPanel(state: AppState, actions: RemoteActions) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
                 if (playback.duration > 0) {
                     var seeking by
-                        remember(playback.tabId, playback.videoId, playback.title) {
+                        remember(
+                            state.remote.activeSessionId,
+                            playback.tabId,
+                            playback.videoId,
+                            playback.title,
+                        ) {
                             mutableStateOf<Float?>(null)
                         }
                     Slider(

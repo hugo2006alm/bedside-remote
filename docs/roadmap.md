@@ -16,13 +16,12 @@ Required sensitivity adjustments and basic interaction feedback do not depend on
 
 | Feature | Priority | Dependencies | Acceptance criteria | Status |
 | --- | --- | --- | --- | --- |
-| Native iOS client and free sideloading. | P1 | Protocol v1, macOS CI, SideStore and a physical iPhone. | Touchpad-first remote, pinned LAN pairing, browser playback and queue control, free installation and upgrade validated on an iPhone. | Planned |
-| Touchpad-first Android home. | P1 | Existing trackpad gestures and playback capabilities. | Touchpad and frequent playback actions share the home screen without scrolling in typical layouts. | In development |
 | Independent Windows login and minimized startup preferences. | P1 | Per-user login registration and persistent agent settings. | Choose automatic launch and tray/window visibility independently; manual opens restore the window; remote server starts while hidden. | Completed; local Windows core/integration and actual WPF checkbox checks pass. Full sign-in/reboot acceptance remains manual. |
 | Approved media launcher from the remote's grid button. | P1 | Authenticated agent catalog; fixed app identities and official web destinations. | Open YouTube and Netflix; show installed Spotify, Stremio and VLC where detected; reject arbitrary paths/URLs and preserve per-PC targeting. | Completed in [PR #12](https://github.com/hugo2006alm/bedside-remote/pull/12); simulated launch, protocol/authentication and two-PC targeting checks pass; physical launch acceptance pending. |
 | Wake-on-LAN from Android. | P1 | Saved network details; compatible hardware, firmware, Windows and network. | Send a magic packet; wake only from verified supported states; document configuration and limits. | Planned |
 | Power management: lock, suspend, shut down and restart. | P2 | Authenticated connection, authorized agent actions and disconnect handling. | Execute allowed actions only; confirm destructive actions; reflect disconnection/recovery. | Planned |
 | Advanced customization: favorites, quick actions and sensitivity/behavior/haptic preferences. | P2 | Stable core controls, persisted settings and an allowed-action policy. | Persist preferences across sessions; restore defaults; execute authorized shortcuts only. | Planned |
+| Touchpad-first Android home. | P1 | Existing trackpad gestures and playback capabilities. | Touchpad and frequent playback actions share the home screen without scrolling in typical layouts. | In development |
 
 ## Ideas under evaluation — implementation not yet approved
 

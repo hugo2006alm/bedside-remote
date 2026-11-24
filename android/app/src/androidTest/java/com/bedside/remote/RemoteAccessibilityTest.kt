@@ -147,7 +147,7 @@ class RemoteAccessibilityTest {
         compose.setContent {
             BedsideTheme { PlaybackPanel(state, RemoteActions(session = { selected = it })) }
         }
-        compose.onNodeWithText("Choose browser tab").performClick()
+        compose.onNodeWithContentDescription("Choose browser tab").performClick()
         compose.onNodeWithText("Remaining paused tab").performClick()
         assertEquals("remaining:2", selected)
     }
