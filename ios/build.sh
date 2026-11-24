@@ -25,16 +25,22 @@ print(next(d["udid"] for runtime, rows in reversed(sorted(devices.items())) for 
 ')
     xcodebuild test -project BedsideRemote.xcodeproj -scheme BedsideRemote -destination "id=$device" \
         -parallel-testing-enabled NO -derivedDataPath build/simulator -resultBundlePath build/tests.xcresult "${settings[@]}"
+    xcrun simctl bootstatus "$device" -b
+    xcrun simctl install "$device" build/simulator/Build/Products/Debug-iphonesimulator/BedsideRemote.app
     xcrun simctl status_bar "$device" override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState unplugged --batteryLevel 100
     xcrun simctl terminate "$device" com.bedside.remote || true
     for appearance in light dark; do
         xcrun simctl ui "$device" appearance "$appearance"
-        xcrun simctl launch "$device" com.bedside.remote
-        sleep 2
-        xcrun simctl io "$device" screenshot "build/remote-$appearance.png"
-        xcrun simctl terminate "$device" com.bedside.remote
+        for scene in disconnected idle youtube netflix netflix-actions; do
+            xcrun simctl launch "$device" com.bedside.remote --preview-state "$scene"
+            sleep 2
+            xcrun simctl io "$device" screenshot "build/remote-$appearance-$scene.png"
+            xcrun simctl terminate "$device" com.bedside.remote
+        done
     done
 fi
+
+if [[ "${1:-}" == --simulator-only ]]; then exit 0; fi
 
 xcodebuild build -project BedsideRemote.xcodeproj -scheme BedsideRemote -configuration Release \
     -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/device \

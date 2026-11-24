@@ -37,6 +37,13 @@ final class RemoteModel {
     }
 
     init() {
+        #if DEBUG && targetEnvironment(simulator)
+        if let index = CommandLine.arguments.firstIndex(of: "--preview-state"),
+           CommandLine.arguments.indices.contains(index + 1) {
+            configurePreview(CommandLine.arguments[index + 1])
+            return
+        }
+        #endif
         do {
             computers = try PairingStore.load()
             selectedID = UserDefaults.standard.string(forKey: "selectedComputer")
@@ -49,7 +56,36 @@ final class RemoteModel {
     var current: Computer? { computers.first { $0.id == selectedID } }
     var supportsDrag: Bool { catalog?.controls.contains("drag") == true }
 
+    #if DEBUG && targetEnvironment(simulator)
+    private var preview = false
+
+    private func configurePreview(_ mode: String) {
+        preview = true
+        if mode == "disconnected" { return }
+        connected = true
+        selectedID = "preview"
+        computers = [Computer(id: "preview", name: "Bedroom PC", endpoint: Endpoint("127.0.0.1", 8765)!, pin: "", token: "")]
+        if mode == "idle" { return }
+        let youtube = mode == "youtube"
+        let platform = youtube ? "youtube" : "netflix"
+        var capabilities = ["playPause", "seek", "fullscreen"]
+        if mode == "netflix-actions" {
+            capabilities += ["skipIntro", "nextEpisode", "audio"]
+        }
+        let title = youtube ? "A quiet evening" : "Evening series · Episode 3"
+        let player = Snapshot.Playback(platform: platform, title: title, paused: false,
+                                       position: 318, duration: 1200, capabilities: capabilities, error: nil)
+        let queue = youtube ? [Snapshot.QueueItem(entryId: "next", title: "Night walks")] : []
+        snapshot = Snapshot(version: 1, type: "state", activeSessionId: "preview:1",
+                            sessions: [.init(sessionId: "preview:1", title: title)],
+                            playback: player, queue: queue, currentEntryId: nil)
+    }
+    #endif
+
     func setActive(_ value: Bool) {
+        #if DEBUG && targetEnvironment(simulator)
+        if preview { return }
+        #endif
         guard value != active else { return }
         active = value
         if !value { cancelPairing() }
@@ -115,6 +151,9 @@ final class RemoteModel {
     }
 
     func reconnect() {
+        #if DEBUG && targetEnvironment(simulator)
+        if preview { return }
+        #endif
         connection?.cancel()
         disconnect()
         message = nil
