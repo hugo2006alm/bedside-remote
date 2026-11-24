@@ -1,0 +1,55 @@
+name: iOS CI
+on:
+  pull_request:
+    paths:
+      - 'ios/**'
+      - 'contracts/**'
+      - '.github/workflows/ios-ci.yml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: SemVer for the test IPA
+        default: '0.1.0-alpha.1'
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        default: '0.1.0-alpha.1'
+        type: string
+permissions:
+  contents: read
+jobs:
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 35
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      APP_VERSION: ${{ inputs.version || '0.1.0-alpha.1' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned XcodeGen
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/xcodegen.zip" https://github.com/yonaskolb/XcodeGen/releases/download/2.48.0/xcodegen.zip
+          echo "620c9f0dc10849f94728ab5df52d225ebab8187439dd6fee1925e59e80dff892  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP/xcodegen"
+          echo "$(dirname "$(find "$RUNNER_TEMP/xcodegen" -type f -name xcodegen -print -quit)")" >> "$GITHUB_PATH"
+      - name: Test on iPhone simulator and package arm64 IPA
+        run: |
+          xcodebuild -version
+          bash ios/build.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-sideload
+          path: artifacts/bedside-remote-ios-*
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: ios-simulator
+          path: |
+            ios/build/tests.xcresult/
+            ios/build/remote-*.png
+          retention-days: 14
