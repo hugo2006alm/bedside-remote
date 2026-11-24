@@ -22,7 +22,7 @@ Updating a saved Android endpoint checks its existing certificate pin using an u
 
 ## Browser and input boundaries
 
-Fingerprint autofill uses an isolated TLS handshake to the numeric LAN endpoint. It sends no HTTP request, code or bearer token; the result is explicitly untrusted until compared with Windows. All subsequent pairing and control requests still require the complete verified DER pin. Changing the endpoint clears confirmation.
+Android and iOS fingerprint autofill use an isolated TLS handshake to the numeric LAN endpoint. It sends no HTTP request, code or bearer token; the result is explicitly untrusted until compared with Windows. All subsequent pairing and control requests still require the complete verified DER pin. Changing the endpoint clears confirmation.
 
 Drag holds belong to one authenticated socket, expire after two seconds without renewal and release on cancellation or foreground change. Another connection cannot move or release that hold. The optional app catalog is authenticated; launch commands contain only fixed app IDs, never remote-supplied executable paths, arguments or URLs. Installed paths are resolved locally. Global media keys are delivered on the connected PC; an application such as Spotify may relay them through its own Connect session to another device, independently of Bedside pairing.
 

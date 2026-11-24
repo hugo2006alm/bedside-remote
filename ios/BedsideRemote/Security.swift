@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import Network
 import Security
 
 enum RemoteError: LocalizedError, Equatable {
@@ -14,6 +15,44 @@ enum RemoteError: LocalizedError, Equatable {
         case .disconnected: "Computer disconnected. Reconnect before retrying."
         case .revoked: "Authorization revoked. Pair this iPhone again."
         }
+    }
+}
+
+enum CertificateFingerprint {
+    static func sha256(_ certificate: Data) -> String {
+        SHA256.hash(data: certificate).map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func candidate(for endpoint: Endpoint) async -> String? {
+        guard let port = NWEndpoint.Port(rawValue: endpoint.port) else { return nil }
+        let queue = DispatchQueue(label: "com.bedside.remote.fingerprint")
+        let tls = NWProtocolTLS.Options()
+        let (results, continuation) = AsyncStream<String>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        sec_protocol_options_set_verify_block(tls.securityProtocolOptions, { _, peerTrust, complete in
+            let trust = sec_trust_copy_ref(peerTrust).takeRetainedValue()
+            if let leaf = (SecTrustCopyCertificateChain(trust) as? [SecCertificate])?.first {
+                continuation.yield(sha256(SecCertificateCopyData(leaf) as Data))
+            }
+            // The candidate is for comparison only. Never establish a trusted connection here.
+            complete(false)
+            continuation.finish()
+        }, queue)
+        let connection = NWConnection(host: NWEndpoint.Host(endpoint.host), port: port,
+                                      using: NWParameters(tls: tls))
+        connection.stateUpdateHandler = { state in
+            if case .failed = state { continuation.finish() }
+        }
+        let deadline = DispatchWorkItem { continuation.finish() }
+        queue.asyncAfter(deadline: .now() + 4, execute: deadline)
+        connection.start(queue: queue)
+        defer {
+            deadline.cancel()
+            connection.cancel()
+        }
+        for await fingerprint in results {
+            return fingerprint
+        }
+        return nil
     }
 }
 
@@ -37,7 +76,7 @@ final class PinnedDelegate: NSObject, URLSessionDelegate, URLSessionTaskDelegate
     }
 
     static func matches(_ certificate: Data, pin: String) -> Bool {
-        SHA256.hash(data: certificate).map { String(format: "%02x", $0) }.joined() == pin
+        CertificateFingerprint.sha256(certificate) == pin
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,

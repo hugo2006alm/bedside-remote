@@ -8,6 +8,12 @@ struct DevicesView: View {
     @State private var pin = ""
     @State private var code = ""
     @State private var confirmed = false
+    @State private var probeFailed = false
+
+    private var pairingEndpoint: Endpoint? {
+        guard let port = UInt16(port) else { return nil }
+        return Endpoint(host.trimmingCharacters(in: .whitespacesAndNewlines), port)
+    }
 
     var body: some View {
         Form {
@@ -67,6 +73,10 @@ struct DevicesView: View {
                 TextField("Port", text: $port).keyboardType(.numberPad)
                 TextField("SHA-256 fingerprint", text: $pin, axis: .vertical)
                     .textInputAutocapitalization(.never).autocorrectionDisabled()
+                if probeFailed {
+                    Text("Could not read the fingerprint. Check the address or enter it from Windows.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
                 Toggle("I compared all 64 fingerprint digits with Windows", isOn: $confirmed)
                 SecureField("Six-digit pairing code", text: $code).keyboardType(.numberPad)
                 Button(model.pairing ? "Cancel pairing" : "Request Windows approval") {
@@ -81,9 +91,26 @@ struct DevicesView: View {
         .navigationTitle("Devices")
         .onAppear { discovery.start() }
         .onDisappear { discovery.stop() }
-        .onChange(of: host) { _, _ in confirmed = false }
-        .onChange(of: port) { _, _ in confirmed = false }
+        .onChange(of: pairingEndpoint) { _, _ in
+            confirmed = false
+            pin = ""
+            probeFailed = false
+        }
         .onChange(of: pin) { _, _ in confirmed = false }
+        .task(id: pairingEndpoint) { [endpoint = pairingEndpoint] in
+            guard let endpoint else { return }
+            // Let manual address entry settle before starting a probe.
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled, pairingEndpoint == endpoint, pin.isEmpty else { return }
+            let candidate = await CertificateFingerprint.candidate(for: endpoint)
+            guard !Task.isCancelled, pairingEndpoint == endpoint, pin.isEmpty else { return }
+            if let candidate {
+                confirmed = false
+                pin = candidate.uppercased()
+            } else {
+                probeFailed = true
+            }
+        }
         .onChange(of: model.computers.count) { _, _ in
             if model.pairing {
                 code = ""
