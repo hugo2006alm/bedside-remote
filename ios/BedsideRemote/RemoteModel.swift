@@ -171,7 +171,13 @@ final class RemoteModel {
         socket = webSocket
         webSocket.resume()
         while !Task.isCancelled {
-            let incoming = try await webSocket.receive()
+            let incoming: URLSessionWebSocketTask.Message
+            do {
+                incoming = try await webSocket.receive()
+            } catch {
+                if (webSocket.response as? HTTPURLResponse)?.statusCode == 401 { throw RemoteError.revoked }
+                throw error
+            }
             guard generation == id else { throw CancellationError() }
             guard case let .string(text) = incoming, let data = text.data(using: .utf8),
                   let fields = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -181,8 +187,8 @@ final class RemoteModel {
             case "state":
                 guard Set(fields.keys) == ["version", "type", "deviceName", "extensionConnected", "activeSessionId", "sessions", "playback", "queue", "currentEntryId"] else { throw RemoteError.invalidResponse }
                 snapshot = try JSONDecoder().decode(Snapshot.self, from: data)
+                if !connected { message = nil }
                 connected = true
-                message = nil
             case "ack":
                 guard Set(fields.keys).isSubset(of: ["version", "type", "id", "ok", "error"]) else { throw RemoteError.invalidResponse }
                 let ack = try JSONDecoder().decode(Acknowledgement.self, from: data)
@@ -209,7 +215,7 @@ final class RemoteModel {
 
     func send(_ action: String, _ payload: [String: Any] = [:], accepted: (() -> Void)? = nil) {
         guard connected, socket != nil else { return }
-        let id = UUID().uuidString
+        let id = UUID().uuidString.lowercased()
         let isMotion = action == "input.pointer" || action == "input.scroll" ||
             action == "input.drag" && payload["phase"] as? String == "move"
         if isMotion, let previous = outgoing.last, previous.action == action,

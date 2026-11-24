@@ -26,7 +26,7 @@ struct RootView: View {
     var body: some View {
         TabView(selection: $tab) {
             NavigationStack {
-                RemoteView(model: model, devices: { tab = "devices" })
+                RemoteView(model: model, visible: tab == "remote" && !settings, devices: { tab = "devices" })
                     .navigationTitle("Bedside Remote")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
@@ -80,6 +80,7 @@ struct RootView: View {
 
 private struct RemoteView: View {
     let model: RemoteModel
+    let visible: Bool
     let devices: () -> Void
     @Environment(\.dynamicTypeSize) private var textSize
     @Environment(\.scenePhase) private var phase
@@ -104,7 +105,7 @@ private struct RemoteView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Trackpad(enabled: model.connected && sheet == nil && phase == .active, supportsDrag: model.supportsDrag,
+                Trackpad(enabled: model.connected && visible && sheet == nil && phase == .active, supportsDrag: model.supportsDrag,
                          sensitivity: min(3, max(0.5, sensitivity)), haptics: haptics, deviceID: model.selectedID) {
                     model.send($0, $1)
                 }

@@ -190,12 +190,15 @@ struct SettingsView: View {
             let (data, response) = try await URLSession.shared.data(from: url)
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw RemoteError.invalidResponse }
             let releases = try JSONDecoder().decode([Release].self, from: data)
-            guard let latest = releases.first(where: { release in !release.draft && release.assets.contains { $0.name == "bedside-remote-ios-\(release.tag_name)-arm64-sideload.ipa" } }) else {
+            let matching = releases.filter { release in
+                !release.draft && release.assets.contains { $0.name == "bedside-remote-ios-\(release.tag_name)-arm64-sideload.ipa" }
+            }
+            guard let latest = matching.max(by: { versionIsNewer($1.tag_name, than: $0.tag_name) }) else {
                 status = "No published iOS package found."
                 return
             }
             let version = Bundle.main.object(forInfoDictionaryKey: "BedsideVersion") as? String ?? ""
-            if latest.tag_name == "v\(version)" {
+            if !versionIsNewer(latest.tag_name, than: version) {
                 status = "This iPhone has the latest published iOS package."
             } else {
                 status = "Published iOS package \(latest.tag_name) is available."

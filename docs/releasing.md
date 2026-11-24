@@ -66,3 +66,7 @@ With configured signatures, releases contain `bedside-remote-android-vX.Y.Z.apk`
 Without credentials, alpha/beta releases explicitly contain a debug-key development APK, an unsigned Windows installer and a development extension ZIP for temporary loading. These are not represented as signed distribution builds. A new CI debug key can prevent in-place Android updates; uninstalling loses local pairing settings. Use a persistent release key for distribution.
 
 The release manifest reports signing and physical validation independently. A passing CI run is not a stable readiness assertion. Standard GitHub-hosted runners are used; no paid larger runners are configured. Artifact retention is kept short.
+
+## iOS sideloading
+
+The reusable macOS job tests on a simulator and produces a separate ARM64 device IPA. Prerelease publication includes the IPA, its SHA-256 checksum and an explicit unsigned sideload entry in the release manifest. Stable release assets retain the existing signing requirements. CI needs no Apple credentials. The IPA is prepared for signing on the user's device through SideStore. See the [installation and refresh guide](../ios/README.md).

@@ -59,3 +59,17 @@ test('unpacked Edge distribution cannot be hidden behind successful Mozilla sign
     assert.throws(() => validateRelease(dir, '1.0.0', true), /Stable release/);
   } finally { rmSync(dir, { recursive: true }); }
 });
+
+test('iOS IPA is explicitly a prerelease sideload artifact', () => {
+  const version = '0.1.0-alpha.1';
+  const dir = fixture(version);
+  try {
+    const file = `bedside-remote-ios-v${version}-arm64-sideload.ipa`;
+    assert.throws(() => validateRelease(dir, version, false, true), /Missing or empty artifact/);
+    writeFileSync(join(dir, file), 'fixture');
+    const manifest = validateRelease(dir, version, false, true);
+    assert.equal(manifest.iosSideload.artifact, file);
+    assert.equal(manifest.iosSideload.signed, false);
+    assert.ok(manifest.artifacts.includes(file));
+  } finally { rmSync(dir, { recursive: true }); }
+});

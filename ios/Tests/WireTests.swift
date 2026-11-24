@@ -23,6 +23,13 @@ final class WireTests: XCTestCase {
         XCTAssertEqual(Endpoint("fd00::1", 8765)?.url("https", "/pair").absoluteString, "https://[fd00::1]:8765/pair")
     }
 
+    func testUpdateOrdering() {
+        XCTAssertTrue(versionIsNewer("v0.1.0-alpha.10", than: "0.1.0-alpha.9"))
+        XCTAssertTrue(versionIsNewer("v0.1.0", than: "0.1.0-alpha.10"))
+        XCTAssertFalse(versionIsNewer("v0.1.0-alpha.9", than: "0.1.0-alpha.10"))
+        XCTAssertFalse(versionIsNewer("v0.1.0-alpha.9", than: "0.1.0-alpha.9"))
+    }
+
     func testCertificateRequiresFullDERFingerprint() {
         let pin = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         XCTAssertTrue(PinnedDelegate.matches(Data("abc".utf8), pin: pin))

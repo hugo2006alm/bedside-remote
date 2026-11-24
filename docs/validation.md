@@ -95,3 +95,7 @@ The observations above are partial physical evidence. The following checklist re
 - Review Android dark/light, contrast, TalkBack labels, touch targets, font scaling, reduced motion, one-hand reach and performance/battery on typical hardware.
 
 Do not set `PHYSICAL_VALIDATION_APPROVED=true` or promote to stable solely from CI. See [release configuration](releasing.md).
+
+## iPhone acceptance
+
+Use the [iPhone physical checklist](../ios/README.md#physical-acceptance) before claiming working SideStore installation, Keychain retention, Bonjour, pinned WebSocket pairing, physical inputs or live streaming. The macOS runner tests the simulator UI and shared wire fixtures, then separately checks the device IPA.

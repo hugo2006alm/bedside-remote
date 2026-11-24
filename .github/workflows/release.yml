@@ -47,6 +47,12 @@ jobs:
     with:
       version: ${{ needs.version.outputs.version }}
     secrets: inherit
+  ios:
+    needs: version
+    uses: ./.github/workflows/ios-ci.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      release_artifact: ${{ needs.version.outputs.publish == 'true' && contains(needs.version.outputs.version, '-') }}
   quality:
     uses: ./.github/workflows/quality.yml
   windows:
@@ -58,14 +64,14 @@ jobs:
     secrets: inherit
   extension:
     # External signing consumes an immutable AMO version. Complete every other check first.
-    needs: [version, android, windows, quality]
+    needs: [version, android, windows, ios, quality]
     uses: ./.github/workflows/extension-ci.yml
     with:
       version: ${{ needs.version.outputs.version }}
       sign: ${{ needs.version.outputs.publish == 'true' }}
     secrets: inherit
   publish:
-    needs: [version, android, windows, extension, quality]
+    needs: [version, android, windows, ios, extension, quality]
     if: needs.version.outputs.publish == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -87,6 +93,7 @@ jobs:
         env:
           APP_VERSION: ${{ needs.version.outputs.version }}
           PHYSICAL_VALIDATION_APPROVED: ${{ vars.PHYSICAL_VALIDATION_APPROVED || 'false' }}
+          INCLUDE_IOS_SIDELOAD: ${{ contains(needs.version.outputs.version, '-') }}
           PREVIOUS_TAG: ${{ needs.version.outputs.previous }}
         run: node scripts/prepare-release.mjs
       - name: Create tag and publish in the same workflow

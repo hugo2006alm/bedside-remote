@@ -119,3 +119,27 @@ func youtubeURL(_ raw: String) -> String? {
     guard let id, id.utf8.count == 11, id.range(of: "^[A-Za-z0-9_-]{11}$", options: .regularExpression) != nil else { return nil }
     return "https://www.youtube.com/watch?v=\(id)"
 }
+
+// Compare the release workflow's numeric core and SemVer prerelease identifiers.
+func versionIsNewer(_ candidate: String, than current: String) -> Bool {
+    func parse(_ version: String) -> (core: [Int], prerelease: [Substring])? {
+        let raw = version.hasPrefix("v") ? version.dropFirst() : Substring(version)
+        let pieces = raw.split(separator: "-", maxSplits: 1)
+        guard let first = pieces.first else { return nil }
+        let core = first.split(separator: ".", omittingEmptySubsequences: false)
+        let values = core.compactMap { Int($0) }
+        guard core.count == 3, values.count == 3, values.allSatisfy({ $0 >= 0 }) else { return nil }
+        return (values, pieces.count == 2 ? pieces[1].split(separator: ".") : [])
+    }
+    guard let lhs = parse(candidate), let rhs = parse(current) else { return false }
+    if lhs.core != rhs.core { return rhs.core.lexicographicallyPrecedes(lhs.core) }
+    if lhs.prerelease.isEmpty || rhs.prerelease.isEmpty {
+        return lhs.prerelease.isEmpty && !rhs.prerelease.isEmpty
+    }
+    for (a, b) in zip(lhs.prerelease, rhs.prerelease) where a != b {
+        if let a = Int(a) { return Int(b).map { a > $0 } ?? false }
+        if Int(b) != nil { return true }
+        return a > b
+    }
+    return lhs.prerelease.count > rhs.prerelease.count
+}

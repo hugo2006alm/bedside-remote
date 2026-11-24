@@ -29,3 +29,15 @@ Paste an official YouTube video URL in **Queue** and select **Play now**, **Play
 - Pair two computers. Switch during playback, while dragging and with drafts pending. Reopen after lock, Wi-Fi changes or Windows restart. Check input is released and old commands are not resent.
 - Test pointer, click, two-finger gestures, drag and Unicode input in real Windows windows. Test VoiceOver, one-handed use, Dynamic Type, orientation and appearance changes.
 - Verify real Zen/Firefox YouTube and the Edge Netflix Store PWA. Check session selection, play/pause, seek, fullscreen exit, optional episode/audio controls, queue ordering and natural advance. Exercise both Shortcuts and paste.
+
+## Android/iOS parity
+
+| Capability | Android | iPhone |
+| --- | --- | --- |
+| Remote and browser playback | Touchpad, Windows controls and contextual streaming actions | Same protocol; touchpad uses UIKit and system sheets |
+| Queue authority | Windows | Windows |
+| YouTube entry | Android share sheet or paste | Shortcuts, validated deep link or paste |
+| Connection | Android NSD, numeric address, full fingerprint, Keystore | Bonjour, numeric address, full fingerprint, Keychain |
+| Device management | Select, update address, forget; revoke on Windows | Select, reconnect, forget; revoke on Windows |
+| Appearance | Midnight or light, haptics and explicit reduce motion | System, dark or light, haptics and native accessibility preferences |
+| Distribution | Android APK | ARM64 prerelease IPA for SideStore |

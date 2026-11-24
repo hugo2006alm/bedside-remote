@@ -57,7 +57,7 @@ struct Trackpad: UIViewRepresentable {
             ]
         }
 
-        required init?(coder: NSCoder) { nil }
+        required init?(coder: NSCoder) { return nil }
 
         override func accessibilityActivate() -> Bool { click(right: false) }
 
