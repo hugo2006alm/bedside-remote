@@ -21,6 +21,7 @@ Required sensitivity adjustments and basic interaction feedback do not depend on
 | Wake-on-LAN from Android. | P1 | Saved network details; compatible hardware, firmware, Windows and network. | Send a magic packet; wake only from verified supported states; document configuration and limits. | Planned |
 | Power management: lock, suspend, shut down and restart. | P2 | Authenticated connection, authorized agent actions and disconnect handling. | Execute allowed actions only; confirm destructive actions; reflect disconnection/recovery. | Planned |
 | Advanced customization: favorites, quick actions and sensitivity/behavior/haptic preferences. | P2 | Stable core controls, persisted settings and an allowed-action policy. | Persist preferences across sessions; restore defaults; execute authorized shortcuts only. | Planned |
+| Touchpad-first Android home. | P1 | Existing trackpad gestures and playback capabilities. | Touchpad and frequent playback actions share the home screen without scrolling in typical layouts. | In development |
 
 ## Ideas under evaluation — implementation not yet approved
 

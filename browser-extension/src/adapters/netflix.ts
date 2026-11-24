@@ -54,6 +54,21 @@ export class NetflixAdapter extends DomAdapter {
     return false;
   }
   override async execute(command: Command, position?: number): Promise<void> {
+    if (command === 'playPause' || command === 'fullscreen') {
+      const video = this.video();
+      const player = video?.closest(this.selectors.player);
+      await super.execute(command, position);
+      const focused = this.doc.activeElement;
+      if (video && video === this.video() && !video.paused &&
+          focused instanceof this.doc.defaultView!.HTMLElement && player?.contains(focused) &&
+          focused.matches('[data-bedside-remote-focus="true"]') &&
+          !focused.closest('[role="dialog"], [aria-modal="true"], [role="menu"], [data-uia="selector-audio-subtitle"], .track-list-container') &&
+          !this.doc.querySelector('[data-uia="control-audio-subtitle"][aria-expanded="true"]') &&
+          !this.audioMenu(focused)) {
+        focused.blur();
+      }
+      return;
+    }
     if (command !== 'audio' && command !== 'subtitles') return super.execute(command, position);
     const button = this.button('audio');
     if (!button) throw new Error('Audio and subtitles are unavailable for this player.');

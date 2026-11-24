@@ -24,7 +24,10 @@ function select(doc: Document, element: HTMLElement) {
   element.focus({ preventScroll: true });
   if (doc.activeElement !== element) throw new Error('This element could not receive focus.');
   element.setAttribute('data-bedside-remote-focus', 'true'); focused.set(doc, element);
-  element.addEventListener('blur', () => element.removeAttribute('data-bedside-remote-focus'), { once: true });
+  element.addEventListener('blur', () => {
+    element.removeAttribute('data-bedside-remote-focus');
+    if (focused.get(doc) === element) focused.delete(doc);
+  }, { once: true });
   element.scrollIntoView?.({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
 }
 export function navigate(doc: Document, command: NavigationCommand): void {

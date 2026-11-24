@@ -251,12 +251,12 @@ class RemoteTransport(
         }
     }
 
-    suspend fun verifyEndpoint(target: PairedComputer) =
+    suspend fun verifyEndpoint(target: PairedComputer, timeoutSeconds: Long = 10) =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val http =
                 pinnedClient(target.fingerprint, target.host)
                     .newBuilder()
-                    .callTimeout(10, TimeUnit.SECONDS)
+                    .callTimeout(timeoutSeconds, TimeUnit.SECONDS)
                     .build()
             try {
                 http

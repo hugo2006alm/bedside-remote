@@ -7,6 +7,9 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -19,6 +22,8 @@ data class AppState(
     val computers: List<PairedComputer> = emptyList(),
     val discovered: List<DiscoveredComputer> = emptyList(),
     val selectedId: String? = null,
+    val checkingComputers: Boolean = false,
+    val reachableIds: Set<String>? = null,
     val status: ConnectionStatus = ConnectionStatus.DISCONNECTED,
     val remote: RemoteState = RemoteState(),
     val catalog: AgentCatalog = AgentCatalog(),
@@ -53,6 +58,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     val state = mutableState.asStateFlow()
     private var foreground = false
     private var pairingJob: Job? = null
+    private var computerCheck: Job? = null
     private val transport =
         RemoteTransport(
             viewModelScope,
@@ -112,7 +118,6 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
                     mutableState.update {
                         it.copy(
                             computers = devices,
-                            selectedId = devices.firstOrNull()?.deviceId,
                             haptics = store.haptics,
                             reducedMotion = store.reducedMotion,
                             lightTheme = store.lightTheme,
@@ -120,7 +125,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
                         )
                     }
                 }
-                if (foreground) mutableState.value.selected?.let(transport::connect)
+                if (foreground) checkComputers()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
@@ -134,17 +139,69 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     fun onForeground() {
         foreground = true
         discovery.start()
-        mutableState.value.selected?.let(transport::connect)
+        checkComputers()
     }
 
     fun onBackground() {
         foreground = false
+        computerCheck?.cancel()
         discovery.stop()
         transport.disconnect()
     }
 
+    fun checkComputers() {
+        computerCheck?.cancel()
+        transport.disconnect()
+        val saved = mutableState.value.computers
+        mutableState.update {
+            it.copy(
+                selectedId = null,
+                checkingComputers = saved.size > 1,
+                reachableIds = null,
+                error = null,
+            )
+        }
+        if (!foreground || saved.isEmpty()) return
+        if (saved.size == 1) {
+            select(saved.single())
+            return
+        }
+        computerCheck =
+            viewModelScope.launch {
+                val reachable = coroutineScope {
+                    saved
+                        .map { computer ->
+                            async {
+                                try {
+                                    transport.verifyEndpoint(computer, timeoutSeconds = 3)
+                                    computer
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (_: Exception) {
+                                    null
+                                }
+                            }
+                        }
+                        .awaitAll()
+                        .filterNotNull()
+                }
+                computerCheck = null
+                val onlyComputer = reachable.singleOrNull()
+                if (onlyComputer != null) select(onlyComputer)
+                mutableState.update {
+                    it.copy(
+                        checkingComputers = false,
+                        reachableIds = reachable.map { pc -> pc.deviceId }.toSet(),
+                    )
+                }
+            }
+    }
+
     fun select(computer: PairedComputer) {
-        mutableState.update { it.copy(selectedId = computer.deviceId, error = null) }
+        computerCheck?.cancel()
+        mutableState.update {
+            it.copy(selectedId = computer.deviceId, checkingComputers = false, error = null)
+        }
         transport.connect(computer)
     }
 
@@ -159,14 +216,13 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
                         mutableState.update {
                             it.copy(
                                 computers = remaining,
-                                selectedId =
-                                    if (selected) remaining.firstOrNull()?.deviceId
-                                    else it.selectedId,
+                                selectedId = if (selected) null else it.selectedId,
                                 notice =
                                     "Computer forgotten on this phone. Revoke the phone in the Windows app to invalidate its token.",
                             )
                         }
-                        if (selected && foreground) remaining.firstOrNull()?.let(transport::connect)
+                        if (foreground && (selected || mutableState.value.checkingComputers))
+                            checkComputers()
                     },
                 )
             } catch (cancelled: CancellationException) {
@@ -252,10 +308,12 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
                             } + computer
                         },
                         { saved ->
+                            computerCheck?.cancel()
                             mutableState.update {
                                 it.copy(
                                     computers = saved,
                                     selectedId = computer.deviceId,
+                                    checkingComputers = false,
                                     pairing = false,
                                     notice = "Computer paired securely",
                                 )

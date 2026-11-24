@@ -27,3 +27,9 @@ The same observation identified concatenated series/episode text and an audio/su
 The Android D-pad offers browser focus navigation and Windows keyboard mode when a browser session is selected. Browser arrows select visible controls/cards by position; OK activates the focused item. The focus outline identifies the selection. This uses public DOM focus/click behavior; unavailable targets and gesture restrictions remain explicit errors.
 
 Fixtures cover available controls and observable state changes. Packaging checks verify identity/permissions; native integration tests cover exact-origin admission and framed stdio. Real Store-app playback, profile/extension loading, metadata, play/pause/seek, intro/recap/episode controls and audio/subtitle access still require the user's session. Builds do not establish DRM, account or autoplay compatibility. Universal controls remain available. Never bypass protections or enable debugging in the user's authenticated profile.
+
+## Persistent controls after remote playback
+
+Browser directional navigation keeps DOM focus on the selected control. When a Netflix contextual Play command resumes the same video, or a contextual fullscreen exit completes while that video is playing, the adapter now releases focus owned by Bedside navigation inside the player. It leaves user focus, paused playback and the audio/subtitle menu alone. This lets Netflix decide when to dismiss its controls through normal player behavior.
+
+The fixture reproduces retained extension focus and verifies its release. The cause of the persistent overlay in the live Edge/PWA session is still unconfirmed. Validate windowed and fullscreen playback with the physical pointer both over the controls and away from them, and compare Windows media keys with contextual commands. Check that intentional overlays remain usable. No styles or player internals are modified.

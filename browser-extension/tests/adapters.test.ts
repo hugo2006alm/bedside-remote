@@ -33,6 +33,30 @@ test('Netflix selects the episode video instead of a retained Home preview', asy
   dom.window.close();
 });
 
+test('Netflix releases remote navigation focus when playback resumes or fullscreen exits', async () => {
+  const { dom, adapter } = await fixture('netflix');
+  const doc = dom.window.document;
+  const button = doc.querySelector<HTMLButtonElement>('[data-uia="control-next"]')!;
+  button.dataset.bedsideRemoteFocus = 'true';
+  button.focus();
+  await adapter.execute('playPause');
+  assert.notEqual(doc.activeElement, button);
+
+  button.focus();
+  Object.defineProperty(doc, 'fullscreenElement', { value: button.parentElement });
+  doc.exitFullscreen = async () => {};
+  await adapter.execute('fullscreen');
+  assert.notEqual(doc.activeElement, button);
+
+  button.focus();
+  await adapter.execute('playPause');
+  assert.equal(doc.activeElement, button);
+  delete button.dataset.bedsideRemoteFocus;
+  await adapter.execute('playPause');
+  assert.equal(doc.activeElement, button);
+  dom.window.close();
+});
+
 test('YouTube reports public metadata, finite progress and actual available controls', async () => {
   const { dom, video, adapter } = await fixture('youtube');
   video.currentTime = 24;
