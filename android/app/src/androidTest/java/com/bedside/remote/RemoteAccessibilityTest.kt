@@ -197,6 +197,8 @@ class RemoteAccessibilityTest {
                 )
             }
         }
+        compose.onNodeWithContentDescription("Windows controls").performClick()
+        compose.onNodeWithText("Browser").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Move right").performScrollTo().performClick()
         assertEquals("right", navigation)
         assertEquals("", key)
