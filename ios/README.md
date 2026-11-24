@@ -41,3 +41,7 @@ Paste an official YouTube video URL in **Queue** and select **Play now**, **Play
 | Device management | Select, update address, forget; revoke on Windows | Select, reconnect, forget; revoke on Windows |
 | Appearance | Midnight or light, haptics and explicit reduce motion | System, dark or light, haptics and native accessibility preferences |
 | Distribution | Android APK | ARM64 prerelease IPA for SideStore |
+
+## SideStore source
+
+After the first iOS prerelease is published, add the [Bedside Remote source](https://raw.githubusercontent.com/hugo2006alm/bedside-remote/sidestore/sidestore-source.json) in SideStore under **Sources**. The release workflow refreshes it with the latest published IPA, exact app version and build number, publication date, size and digest. This is a public GitHub URL and requires no additional service. For test builds from a pull request, use the IPA file from the Actions artifact.

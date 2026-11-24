@@ -101,8 +101,29 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           APP_VERSION: ${{ needs.version.outputs.version }}
         run: |
-          if [[ "$APP_VERSION" == *-* ]]; then
+          if git show-ref --verify --quiet "refs/tags/v$APP_VERSION"; then
+            test "$(git rev-parse "v$APP_VERSION^{commit}")" = "$GITHUB_SHA"
+            gh release view "v$APP_VERSION" >/dev/null
+          elif [[ "$APP_VERSION" == *-* ]]; then
             gh release create "v$APP_VERSION" artifacts/* --target "$GITHUB_SHA" --title "Bedside Remote v$APP_VERSION" --notes-file release-notes.md --prerelease
           else
             gh release create "v$APP_VERSION" artifacts/* --target "$GITHUB_SHA" --title "Bedside Remote v$APP_VERSION" --notes-file release-notes.md
           fi
+
+      - name: Update the SideStore source from the published prerelease
+        if: contains(needs.version.outputs.version, '-')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          gh release view "v$APP_VERSION" --json assets,publishedAt | node scripts/sidestore-source.mjs
+          branch=sidestore
+          if ! gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" --silent; then
+            gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/heads/$branch" -f sha="$GITHUB_SHA" --silent
+          fi
+          source="repos/$GITHUB_REPOSITORY/contents/sidestore-source.json"
+          sha=$(gh api "$source?ref=$branch" --jq .sha 2>/dev/null || true)
+          args=()
+          if [[ -n "$sha" ]]; then args+=(-f "sha=$sha"); fi
+          gh api --method PUT "$source" -f branch="$branch" -f message="Update SideStore source for v$APP_VERSION" \
+            -f "content=$(base64 -w0 sidestore-source.json)" "${args[@]}" --silent
