@@ -23,11 +23,12 @@ import json, sys
 devices = json.load(sys.stdin)["devices"]
 print(next(d["udid"] for runtime, rows in reversed(sorted(devices.items())) for d in rows if "iOS" in runtime and d["name"] == "iPhone 17"))
 ')
+    xcrun simctl boot "$device" || xcrun simctl bootstatus "$device" -b
     xcodebuild test -project BedsideRemote.xcodeproj -scheme BedsideRemote -destination "id=$device" \
         -parallel-testing-enabled NO -derivedDataPath build/simulator -resultBundlePath build/tests.xcresult "${settings[@]}"
     xcrun simctl bootstatus "$device" -b
     xcrun simctl install "$device" build/simulator/Build/Products/Debug-iphonesimulator/BedsideRemote.app
-    xcrun simctl status_bar "$device" override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState unplugged --batteryLevel 100
+    xcrun simctl status_bar "$device" override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState discharging --batteryLevel 100
     xcrun simctl terminate "$device" com.bedside.remote || true
     for appearance in light dark; do
         xcrun simctl ui "$device" appearance "$appearance"
