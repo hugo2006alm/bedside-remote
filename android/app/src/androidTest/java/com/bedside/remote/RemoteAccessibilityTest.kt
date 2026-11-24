@@ -16,6 +16,21 @@ class RemoteAccessibilityTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
+    fun remoteOpensOnTrackpadWithNoPermanentDirectionalPad() {
+        compose.setContent {
+            BedsideTheme {
+                RemoteContent(AppState(status = ConnectionStatus.CONNECTED), RemoteActions())
+            }
+        }
+        compose
+            .onNodeWithContentDescription("Computer trackpad", substring = true)
+            .assertIsDisplayed()
+        compose.onNodeWithContentDescription("Open keyboard").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Move up").assertDoesNotExist()
+        compose.onNodeWithText("Touch").assertDoesNotExist()
+    }
+
+    @Test
     fun keyboardKeepsRejectedDraftAndClearsOnlyAfterAcceptedAcknowledgement() {
         val state = mutableStateOf(AppState(status = ConnectionStatus.CONNECTED))
         compose.setContent {
@@ -116,7 +131,7 @@ class RemoteAccessibilityTest {
                 )
             }
         }
-        compose.onNodeWithContentDescription("Open media apps").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Open media apps").performClick()
         compose.onNodeWithText("Open on your PC").assertExists()
         compose.onNodeWithText("Spotify").performClick()
         assertEquals("spotify", launched)

@@ -38,6 +38,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
@@ -46,8 +47,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import java.net.URI
 
 data class RemoteActions(
     val key: (String) -> Unit = {},
@@ -143,7 +142,6 @@ fun BedsideApp(state: AppState, model: RemoteViewModel) {
 
 private enum class Screen(val label: String, val icon: ImageVector) {
     REMOTE("Remote", Icons.Rounded.SettingsRemote),
-    TOUCH("Touch", Icons.Rounded.TouchApp),
     QUEUE("Queue", Icons.AutoMirrored.Rounded.QueueMusic),
     DEVICES("Devices", Icons.Rounded.DesktopWindows),
 }
@@ -269,7 +267,6 @@ fun RemoteContent(
             ) { active ->
                 when (active) {
                     Screen.REMOTE -> RemoteScreen(state, actions, onKeyboard = { keyboard = true })
-                    Screen.TOUCH -> TouchScreen(state, actions, onKeyboard = { keyboard = true })
                     Screen.QUEUE -> QueueScreen(state, actions)
                     Screen.DEVICES -> DevicesScreen(state, actions)
                 }
@@ -307,27 +304,69 @@ private fun statusLabel(status: ConnectionStatus) =
 
 @Composable
 private fun RemoteScreen(state: AppState, actions: RemoteActions, onKeyboard: () -> Unit) {
-    var browserNavigation by rememberSaveable { mutableStateOf(true) }
+    var secondary by rememberSaveable { mutableStateOf(false) }
     var appsVisible by rememberSaveable { mutableStateOf(false) }
-    val browserTarget = browserNavigation && state.remote.activeSessionId != null
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-        Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.Bottom) {
-            Text(
-                "Settle in.",
-                style = MaterialTheme.typography.displaySmall,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                if (browserTarget) "BROWSER" else "UNIVERSAL",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 6.dp),
+    BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        val compactHeight = maxHeight < 490.dp || LocalDensity.current.fontScale >= 1.5f
+        var playbackVisible by rememberSaveable { mutableStateOf(false) }
+        Column(Modifier.fillMaxSize().padding(vertical = 6.dp)) {
+            Trackpad(state, actions, Modifier.weight(1f))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                Control(
+                    Icons.Rounded.Keyboard,
+                    "Open keyboard",
+                    state.connected,
+                    onClick = onKeyboard,
+                )
+                Control(Icons.AutoMirrored.Rounded.ArrowBack, "Back / Escape", state.connected) {
+                    actions.key("escape")
+                }
+                Control(Icons.Rounded.Apps, "Open media apps", state.connected) {
+                    appsVisible = true
+                }
+                Control(Icons.AutoMirrored.Rounded.VolumeUp, "Windows controls", state.connected) {
+                    secondary = true
+                }
+            }
+            if (compactHeight) {
+                if (state.remote.playback != null || state.remote.sessions.isNotEmpty())
+                    TextButton(onClick = { playbackVisible = true }) { Text("Browser playback") }
+            } else if (state.remote.playback != null || state.remote.sessions.isNotEmpty()) {
+                PlaybackPanel(state, actions)
+            }
+        }
+        if (playbackVisible) {
+            AlertDialog(
+                onDismissRequest = { playbackVisible = false },
+                title = { Text("Browser playback") },
+                text = {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        PlaybackPanel(state, actions)
+                    }
+                },
+                confirmButton = { TextButton({ playbackVisible = false }) { Text("Close") } },
             )
         }
+    }
+    if (appsVisible) MediaAppsDialog(state, actions) { appsVisible = false }
+    if (secondary) {
+        AlertDialog(
+            onDismissRequest = { secondary = false },
+            title = { Text("Windows controls") },
+            text = { SecondaryControls(state, actions) },
+            confirmButton = { TextButton({ secondary = false }) { Text("Close") } },
+        )
+    }
+}
+
+@Composable
+private fun SecondaryControls(state: AppState, actions: RemoteActions) {
+    var browserNavigation by rememberSaveable { mutableStateOf(false) }
+    val browserTarget = browserNavigation && state.remote.activeSessionId != null
+    Column(
+        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         if (state.remote.activeSessionId != null) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 FilterChip(
@@ -348,12 +387,8 @@ private fun RemoteScreen(state: AppState, actions: RemoteActions, onKeyboard: ()
             }
         }
         DPad(state.connected, if (browserTarget) actions.navigate else actions.desktopNavigate)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            Control(Icons.AutoMirrored.Rounded.ArrowBack, "Back / Escape", state.connected) {
-                actions.key("escape")
-            }
-            Control(Icons.Rounded.Apps, "Open media apps", state.connected) { appsVisible = true }
-            Control(Icons.Rounded.Keyboard, "Open keyboard", state.connected, onClick = onKeyboard)
+        TextButton(onClick = { actions.key("home") }, enabled = state.connected) {
+            Text("Windows Start")
         }
         Surface(
             shape = RoundedCornerShape(28.dp),
@@ -419,10 +454,7 @@ private fun RemoteScreen(state: AppState, actions: RemoteActions, onKeyboard: ()
                 }
             }
         }
-        PlaybackPanel(state, actions)
-        Spacer(Modifier.height(8.dp))
     }
-    if (appsVisible) MediaAppsDialog(state, actions) { appsVisible = false }
 }
 
 @Composable
@@ -573,108 +605,50 @@ private fun Control(
 @Composable
 internal fun PlaybackPanel(state: AppState, actions: RemoteActions) {
     val playback = state.remote.playback
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "NOW PLAYING",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                playback?.let {
+                    "${it.platform.uppercase()} · ${it.title.ifBlank { "Browser playback" }}"
+                } ?: "Browser playback",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            if (playback != null)
-                Text(
-                    playback.platform.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-        }
-        if (
-            state.remote.sessions.isNotEmpty() &&
-                (state.remote.sessions.size > 1 || state.remote.activeSessionId == null)
-        ) {
-            var expanded by remember { mutableStateOf(false) }
-            Box {
-                TextButton(onClick = { expanded = true }) {
-                    Icon(Icons.Rounded.Tab, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Choose browser tab")
-                }
-                DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
-                    state.remote.sessions.forEach { session ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    "${if (session.sessionId == state.remote.activeSessionId) "● " else ""}${session.title}",
-                                    maxLines = 2,
-                                )
-                            },
-                            onClick = {
-                                actions.session(session.sessionId)
-                                expanded = false
-                            },
-                        )
+            if (
+                state.remote.sessions.isNotEmpty() &&
+                    (state.remote.sessions.size > 1 || state.remote.activeSessionId == null)
+            ) {
+                var expanded by remember { mutableStateOf(false) }
+                Box {
+                    TextButton(onClick = { expanded = true }) {
+                        Icon(Icons.Rounded.Tab, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Choose browser tab")
+                    }
+                    DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
+                        state.remote.sessions.forEach { session ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "${if (session.sessionId == state.remote.activeSessionId) "● " else ""}${session.title}",
+                                        maxLines = 2,
+                                    )
+                                },
+                                onClick = {
+                                    actions.session(session.sessionId)
+                                    expanded = false
+                                },
+                            )
+                        }
                     }
                 }
             }
         }
-        if (!state.remote.extensionConnected || playback == null) {
-            Text(
-                if (!state.connected) "Connect to see your browser playback."
-                else if (!state.remote.extensionConnected)
-                    "Universal remote ready. Connect a browser companion for smart controls."
-                else "Open YouTube in Zen / Firefox, or Netflix in the Edge Store app companion.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            return
-        }
+        if (!state.remote.extensionConnected || playback == null) return
         Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surface) {
-            Column(
-                Modifier.fillMaxWidth().padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    val thumbnail =
-                        playback.thumbnail?.takeIf {
-                            runCatching {
-                                    val uri = URI(it)
-                                    uri.scheme == "https" &&
-                                        uri.host in setOf("i.ytimg.com", "img.youtube.com") &&
-                                        uri.rawUserInfo == null &&
-                                        uri.port == -1
-                                }
-                                .getOrDefault(false)
-                        }
-                    if (thumbnail != null)
-                        AsyncImage(
-                            thumbnail,
-                            null,
-                            modifier = Modifier.size(72.dp, 52.dp).clip(RoundedCornerShape(10.dp)),
-                        )
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            playback.title.ifBlank { "Browser playback" },
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        playback.channel
-                            ?.takeIf { it.isNotBlank() }
-                            ?.let {
-                                Text(
-                                    it,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                    }
-                }
+            Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
                 if (playback.duration > 0) {
                     var seeking by
                         remember(playback.tabId, playback.videoId, playback.title) {
@@ -761,22 +735,43 @@ internal fun PlaybackPanel(state: AppState, actions: RemoteActions) {
                         add("audio" to "Audio")
                     }
                 }
-                contextualActions
-                    .filter { it.first in playback.capabilities }
-                    .forEach { (command, label) ->
-                        OutlinedButton(
-                            onClick = { actions.browser(command, null) },
-                            enabled = state.connected,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(label)
+                val available = contextualActions.filter { it.first in playback.capabilities }
+                if (available.isNotEmpty()) {
+                    var expanded by remember { mutableStateOf(false) }
+                    Box {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            val (command, label) = available.first()
+                            TextButton(
+                                onClick = { actions.browser(command, null) },
+                                enabled = state.connected,
+                            ) {
+                                Text(label, maxLines = 1)
+                            }
+                            if (available.size > 1) {
+                                TextButton(onClick = { expanded = true }) { Text("More") }
+                            }
+                        }
+                        DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
+                            available.drop(1).forEach { (command, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    enabled = state.connected,
+                                    onClick = {
+                                        expanded = false
+                                        actions.browser(command, null)
+                                    },
+                                )
+                            }
                         }
                     }
+                }
                 playback.error?.let {
                     Text(
                         it,
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 if (playback.platform == "youtube") {
@@ -805,7 +800,7 @@ private fun timeLabel(seconds: Double): String {
 }
 
 @Composable
-private fun TouchScreen(state: AppState, actions: RemoteActions, onKeyboard: () -> Unit) {
+private fun Trackpad(state: AppState, actions: RemoteActions, modifier: Modifier) {
     var dragHeld by remember { mutableStateOf(false) }
     val currentActions by rememberUpdatedState(actions)
     LaunchedEffect(dragHeld, state.connected) {
@@ -815,155 +810,112 @@ private fun TouchScreen(state: AppState, actions: RemoteActions, onKeyboard: () 
                 currentActions.drag("move", 0f, 0f)
             }
     }
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
-    ) {
-        Text("A lighter touch.", style = MaterialTheme.typography.headlineMedium)
-        Text(
-            "Slide to move · tap to click\nDouble-tap and hold to drag or select\nTwo-finger tap for right click · two fingers to scroll",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Box(
-            Modifier.fillMaxWidth()
-                .height(320.dp)
-                .clip(RoundedCornerShape(32.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .semantics {
-                    contentDescription =
-                        "Computer trackpad. Slide to move, double-tap and hold to drag, tap two fingers for right click, slide two fingers to scroll."
-                    customActions =
-                        listOf(
-                            CustomAccessibilityAction("Left click") {
-                                if (state.connected) {
-                                    actions.click(false)
-                                    true
-                                } else false
-                            },
-                            CustomAccessibilityAction("Right click") {
-                                if (state.connected) {
-                                    actions.click(true)
-                                    true
-                                } else false
-                            },
-                            CustomAccessibilityAction("Scroll up") {
-                                if (state.connected) {
-                                    actions.scroll(120)
-                                    true
-                                } else false
-                            },
-                            CustomAccessibilityAction("Scroll down") {
-                                if (state.connected) {
-                                    actions.scroll(-120)
-                                    true
-                                } else false
-                            },
-                        )
-                }
-                .pointerInput(
-                    state.connected,
-                    state.sensitivity,
-                    state.catalog.controls,
-                    state.dragRejected,
-                ) {
-                    if (!state.connected) return@pointerInput
-                    val gesture =
-                        TrackpadGesture(
-                            viewConfiguration.touchSlop,
-                            viewConfiguration.doubleTapTimeoutMillis,
-                            viewConfiguration.longPressTimeoutMillis,
-                            "drag" in state.catalog.controls,
-                        ) { action ->
-                            when (action) {
-                                is TrackpadAction.Move ->
-                                    currentActions.pointer(action.dx, action.dy)
-                                is TrackpadAction.Scroll -> currentActions.scroll(action.delta)
-                                is TrackpadAction.Click -> currentActions.click(action.right)
-                                is TrackpadAction.Drag ->
-                                    currentActions.drag(action.phase, action.dx, action.dy)
-                            }
+    Box(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(32.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .semantics {
+                contentDescription =
+                    "Computer trackpad. Slide to move, double-tap and hold to drag, tap two fingers for right click, slide two fingers to scroll."
+                customActions =
+                    listOf(
+                        CustomAccessibilityAction("Left click") {
+                            if (state.connected) {
+                                actions.click(false)
+                                true
+                            } else false
+                        },
+                        CustomAccessibilityAction("Right click") {
+                            if (state.connected) {
+                                actions.click(true)
+                                true
+                            } else false
+                        },
+                        CustomAccessibilityAction("Scroll up") {
+                            if (state.connected) {
+                                actions.scroll(120)
+                                true
+                            } else false
+                        },
+                        CustomAccessibilityAction("Scroll down") {
+                            if (state.connected) {
+                                actions.scroll(-120)
+                                true
+                            } else false
+                        },
+                    )
+            }
+            .pointerInput(
+                state.connected,
+                state.sensitivity,
+                state.catalog.controls,
+                state.dragRejected,
+            ) {
+                if (!state.connected) return@pointerInput
+                val gesture =
+                    TrackpadGesture(
+                        viewConfiguration.touchSlop,
+                        viewConfiguration.doubleTapTimeoutMillis,
+                        viewConfiguration.longPressTimeoutMillis,
+                        "drag" in state.catalog.controls,
+                    ) { action ->
+                        when (action) {
+                            is TrackpadAction.Move -> currentActions.pointer(action.dx, action.dy)
+                            is TrackpadAction.Scroll -> currentActions.scroll(action.delta)
+                            is TrackpadAction.Click -> currentActions.click(action.right)
+                            is TrackpadAction.Drag ->
+                                currentActions.drag(action.phase, action.dx, action.dy)
                         }
-                    try {
-                        awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false)
-                            down.consume()
-                            gesture.down(down.uptimeMillis, down.position.x, down.position.y)
-                            dragHeld = gesture.dragging
-                            var previousCount = 1
-                            do {
-                                val event = awaitPointerEvent()
-                                val pressed = event.changes.filter { it.pressed }
-                                val delta =
-                                    if (pressed.size == previousCount && pressed.isNotEmpty())
-                                        pressed
-                                            .map { it.positionChange() }
-                                            .fold(Offset.Zero) { sum, change -> sum + change } /
-                                            pressed.size.toFloat()
-                                    else Offset.Zero
-                                gesture.move(pressed.size, delta.x, delta.y)
-                                previousCount = pressed.size
-                                event.changes.forEach { it.consume() }
-                                if (pressed.isEmpty())
-                                    gesture.up(event.changes.maxOf { it.uptimeMillis })
-                                dragHeld = gesture.dragging
-                            } while (event.changes.any { it.pressed })
-                        }
-                    } finally {
-                        gesture.cancel()
-                        dragHeld = false
                     }
-                },
-            contentAlignment = Alignment.Center,
+                try {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        down.consume()
+                        gesture.down(down.uptimeMillis, down.position.x, down.position.y)
+                        dragHeld = gesture.dragging
+                        var previousCount = 1
+                        do {
+                            val event = awaitPointerEvent()
+                            val pressed = event.changes.filter { it.pressed }
+                            val delta =
+                                if (pressed.size == previousCount && pressed.isNotEmpty())
+                                    pressed
+                                        .map { it.positionChange() }
+                                        .fold(Offset.Zero) { sum, change -> sum + change } /
+                                        pressed.size.toFloat()
+                                else Offset.Zero
+                            gesture.move(pressed.size, delta.x, delta.y)
+                            previousCount = pressed.size
+                            event.changes.forEach { it.consume() }
+                            if (pressed.isEmpty())
+                                gesture.up(event.changes.maxOf { it.uptimeMillis })
+                            dragHeld = gesture.dragging
+                        } while (event.changes.any { it.pressed })
+                    }
+                } finally {
+                    gesture.cancel()
+                    dragHeld = false
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Icon(
-                    Icons.Rounded.TouchApp,
-                    null,
-                    Modifier.size(40.dp),
-                    tint = MaterialTheme.colorScheme.outline,
-                )
-                Text(
-                    if (state.connected) "SPACE TO MOVE" else "CONNECT TO USE",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Icon(
+                Icons.Rounded.TouchApp,
+                null,
+                Modifier.size(40.dp),
+                tint = MaterialTheme.colorScheme.outline,
+            )
+            Text(
+                if (state.connected) "SPACE TO MOVE" else "CONNECT TO USE",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(
-                { actions.click(false) },
-                Modifier.weight(1f),
-                enabled = state.connected,
-            ) {
-                Text("Left click")
-            }
-            OutlinedButton(
-                { actions.click(true) },
-                Modifier.weight(1f),
-                enabled = state.connected,
-            ) {
-                Text("Right click")
-            }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            Control(Icons.Rounded.KeyboardArrowUp, "Scroll up", state.connected) {
-                actions.scroll(120)
-            }
-            Control(Icons.Rounded.Keyboard, "Open keyboard", state.connected, onClick = onKeyboard)
-            Control(Icons.Rounded.KeyboardArrowDown, "Scroll down", state.connected) {
-                actions.scroll(-120)
-            }
-        }
-        Text("Pointer sensitivity", style = MaterialTheme.typography.titleMedium)
-        Slider(
-            state.sensitivity,
-            actions.sensitivity,
-            valueRange = .5f..3f,
-            modifier = Modifier.semantics { contentDescription = "Pointer sensitivity" },
-        )
     }
 }
 
@@ -1611,6 +1563,13 @@ private fun SettingsDialog(state: AppState, actions: RemoteActions, onDismiss: (
                     "Midnight appearance is the default",
                     state.lightTheme,
                     actions.lightTheme,
+                )
+                Text("Pointer sensitivity", style = MaterialTheme.typography.titleSmall)
+                Slider(
+                    state.sensitivity,
+                    actions.sensitivity,
+                    valueRange = .5f..3f,
+                    modifier = Modifier.semantics { contentDescription = "Pointer sensitivity" },
                 )
                 HorizontalDivider()
                 Text(
