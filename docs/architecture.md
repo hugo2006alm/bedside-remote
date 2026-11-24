@@ -2,6 +2,7 @@
 
 ## Components
 
+- **iOS:** SwiftUI, UIKit touch input, pinned URLSession, Bonjour, and Keychain. It uses the existing Windows agent and protocol v1. See [iOS architecture and distribution](../ios/README.md).
 - **Android:** Kotlin, Jetpack Compose and Material 3, ViewModel/StateFlow, Coroutines, OkHttp for HTTPS/WSS, Android NSD and Keystore-backed credential encryption. Native sharing is the required YouTube selection flow; no Google credentials are collected.
 - **Windows:** C#/.NET 10 LTS, WPF control window and system tray, running as the logged-in user. WPF supports conventional self-contained deployment without adding the WinUI Windows App SDK bootstrap. ASP.NET Core/Kestrel provides the local TLS endpoint. Win32 input APIs provide an explicitly allowed set of universal actions; a Windows Service cannot interact with the user's desktop reliably and is unnecessary here.
 - **Extension:** TypeScript/WebExtensions for Firefox and Zen, with isolated YouTube and Netflix content adapters. Native Messaging connects the background extension to a per-user Windows bridge; a restricted named pipe connects bridge processes to the interactive agent. No website can connect to a localhost control port.
