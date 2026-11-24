@@ -19,6 +19,8 @@ Discovery considers all resolved addresses on Android 14 and later, with optiona
 
 Remote works independently of the browser extension. Remote opens on the touchpad. Slide to move, tap to click, tap with two fingers for a right click, slide with two fingers to scroll, or double-tap and hold to drag. Accessible click and scroll actions are available on the touchpad. Windows controls opens volume, media, Start and directional navigation. Browser playback appears below the touchpad, with a dialog fallback on short screens or at large font scales. Keyboard sends Unicode text to the focused Windows field. Share an official HTTPS YouTube link to Bedside Remote or paste one in Queue, then choose Play now, Play next or Add to queue. Queue changes are acknowledged by Windows; playback may still require a browser gesture because of autoplay restrictions.
 
+With several pairings, Remote checks saved addresses in parallel on return to the app. It connects automatically if exactly one computer responds with the expected certificate. If several respond or none responds, use Devices to pick a computer or check availability again. If the selected computer disconnects, Devices lets you switch while it retries. Remote input stays bound to the selected computer.
+
 If the PC’s IP changes, use **Devices → Edit address**. Android checks the saved certificate before saving the new numeric address/port, preserving pairing. Text and pasted video drafts remain until Windows acknowledges success; rejection/disconnect preserves them for review, without automatic replay.
 
 App connections close while backgrounded and reconnect on return. Commands are never replayed after reconnect. Revoke phones in Windows; Forget removes credentials from this phone only.

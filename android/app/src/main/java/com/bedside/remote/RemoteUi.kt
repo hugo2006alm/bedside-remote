@@ -66,6 +66,7 @@ data class RemoteActions(
     val remove: (String) -> Unit = {},
     val move: (String, Int) -> Unit = { _, _ -> },
     val select: (PairedComputer) -> Unit = {},
+    val checkComputers: () -> Unit = {},
     val forget: (PairedComputer) -> Unit = {},
     val updateEndpoint: (PairedComputer, String, String) -> Unit = { _, _, _ -> },
     val pair: (String, String, String, String, Boolean) -> Unit = { _, _, _, _, _ -> },
@@ -99,6 +100,7 @@ fun BedsideApp(state: AppState, model: RemoteViewModel) {
                 remove = model::remove,
                 move = model::move,
                 select = model::select,
+                checkComputers = model::checkComputers,
                 forget = {
                     model.forget(it)
                     Unit
@@ -156,6 +158,14 @@ fun RemoteContent(
     var keyboard by rememberSaveable { mutableStateOf(false) }
     var settings by rememberSaveable { mutableStateOf(false) }
     var shareVisible by remember(state.sharedUrl) { mutableStateOf(state.sharedUrl != null) }
+    val chooseComputer =
+        state.computers.size > 1 &&
+            ((state.reachableIds != null && state.selectedId == null) ||
+                state.status == ConnectionStatus.RECONNECTING ||
+                state.status == ConnectionStatus.REVOKED)
+    LaunchedEffect(chooseComputer) {
+        if (chooseComputer && screen == Screen.REMOTE) screen = Screen.DEVICES
+    }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
@@ -244,6 +254,8 @@ fun RemoteContent(
                         }
                         Text(
                             if (state.computers.isEmpty()) "Pair your computer to begin"
+                            else if (state.checkingComputers) "Checking paired computers…"
+                            else if (state.selectedId == null) "Choose a computer"
                             else statusLabel(state.status),
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
@@ -1101,38 +1113,64 @@ private fun DevicesScreen(state: AppState, actions: RemoteActions) {
                 "On Windows, open Bedside Remote → Pair a phone. Keep both devices on the same private network.",
                 modifier = Modifier.padding(vertical = 12.dp),
             )
-        state.computers.forEach { computer ->
-            Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surface) {
-                Column(
-                    Modifier.fillMaxWidth().padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+        if (state.computers.size > 1 && !state.connected) {
+            Text(
+                when {
+                    state.checkingComputers -> "Checking paired computers on this network…"
+                    state.reachableIds?.isEmpty() == true && state.selectedId == null ->
+                        "No paired computers responded. Check the network or try again."
+                    else -> "Choose which computer to control."
+                }
+            )
+            TextButton(actions.checkComputers, enabled = !state.checkingComputers) {
+                Text("Check availability")
+            }
+        }
+        state.computers
+            .sortedByDescending { it.deviceId in state.reachableIds.orEmpty() }
+            .forEach { computer ->
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surface,
                 ) {
-                    Text(computer.name, style = MaterialTheme.typography.titleLarge)
-                    Text(
-                        "${computer.host}:${computer.port}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (computer.deviceId == state.selectedId)
+                    Column(
+                        Modifier.fillMaxWidth().padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(computer.name, style = MaterialTheme.typography.titleLarge)
                         Text(
-                            statusLabel(state.status),
-                            color = MaterialTheme.colorScheme.primary,
+                            "${computer.host}:${computer.port}",
                             style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton({ editing = computer }) { Text("Edit address") }
-                        TextButton({ forget = computer }) { Text("Forget") }
-                        FilledTonalButton({ actions.select(computer) }) {
+                        if (
+                            computer.deviceId != state.selectedId &&
+                                computer.deviceId in state.reachableIds.orEmpty()
+                        )
                             Text(
-                                if (computer.deviceId == state.selectedId && state.connected)
-                                    "Reconnect"
-                                else "Connect"
+                                "Available on this network",
+                                style = MaterialTheme.typography.bodySmall,
                             )
+                        if (computer.deviceId == state.selectedId)
+                            Text(
+                                statusLabel(state.status),
+                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            TextButton({ editing = computer }) { Text("Edit address") }
+                            TextButton({ forget = computer }) { Text("Forget") }
+                            FilledTonalButton({ actions.select(computer) }) {
+                                Text(
+                                    if (computer.deviceId == state.selectedId && state.connected)
+                                        "Reconnect"
+                                    else "Connect"
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
         Button(
             {
                 discovered = null

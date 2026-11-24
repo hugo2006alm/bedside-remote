@@ -20,6 +20,28 @@ class RemoteAccessibilityTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
+    fun multipleAvailableComputersRequireAnExplicitChoice() {
+        val first = PairedComputer("first", "Office PC", "192.168.1.2", 8765, "", "")
+        val second = PairedComputer("second", "Bedroom PC", "192.168.1.3", 8765, "", "")
+        var selected: String? = null
+        compose.setContent {
+            BedsideTheme {
+                RemoteContent(
+                    AppState(
+                        computers = listOf(first, second),
+                        reachableIds = setOf("first", "second"),
+                    ),
+                    RemoteActions(select = { selected = it.deviceId }),
+                )
+            }
+        }
+        compose.onNodeWithText("Choose which computer to control.").assertIsDisplayed()
+        assertEquals(null, selected)
+        compose.onAllNodesWithText("Connect")[1].performScrollTo().performClick()
+        assertEquals("second", selected)
+    }
+
+    @Test
     fun remoteOpensOnTrackpadWithNoPermanentDirectionalPad() {
         compose.setContent {
             BedsideTheme {
