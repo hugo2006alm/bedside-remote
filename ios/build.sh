@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")"
 version="${APP_VERSION:-0.1.0-alpha.1}"
 build_number="${GITHUB_RUN_NUMBER:-1}"
 if [[ ! "$version" =~ ^([0-9]+\.[0-9]+\.[0-9]+)(-[0-9A-Za-z.-]+)?$ ]]; then
@@ -46,10 +46,10 @@ xcrun vtool -show-build "$app/BedsideRemote" | grep -Eq 'platform IOS$'
 [[ ! -e "$app/embedded.mobileprovision" && ! -e "$app/_CodeSignature" && ! -e "$app/PlugIns" && -s "$app/LICENSE" ]]
 /usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Info.plist" | grep -Fx com.bedside.remote
 /usr/libexec/PlistBuddy -c 'Print BedsideVersion' "$app/Info.plist" | grep -Fx "$version"
-if otool -l "$app/BedsideRemote" | grep -q 'LC_CODE_SIGNATURE'; then
-    echo "Unexpected embedded code signature." >&2
-    exit 1
+if [[ "$(otool -l "$app/BedsideRemote")" == *LC_CODE_SIGNATURE* ]]; then
+    codesign --remove-signature "$app/BedsideRemote"
 fi
+[[ "$(otool -l "$app/BedsideRemote")" != *LC_CODE_SIGNATURE* ]]
 mkdir -p build/package/Payload
 ditto "$app" build/package/Payload/BedsideRemote.app
 ditto -c -k --keepParent build/package/Payload "../artifacts/$package"

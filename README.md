@@ -87,3 +87,7 @@ Copyright (c) 2026 **hugo2006alm**. Project source is licensed under [MIT](LICEN
 - Streaming websites can change their DOM. Fixture tests protect known adapter behavior, while real Netflix/YouTube playback, localization and DRM require testing on the target browser.
 - DNS-SD depends on local network multicast. Manual connection remains available; public addresses are rejected.
 - Missing Android, Windows or Mozilla signing credentials produces an explicitly incomplete development prerelease. An unsigned extension ZIP cannot be installed as a permanent signed add-on.
+
+## iPhone development build
+
+The native SwiftUI client uses the same Windows agent and browser companions. See the [iPhone build and SideStore guide](ios/README.md) for CI artifacts, installation, pairing and physical acceptance.

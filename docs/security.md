@@ -8,6 +8,7 @@ The local network and DNS-SD announcements are untrusted. A persistent self-sign
 
 ## Transport and credentials
 
+The iOS client also pins the full leaf certificate for pairing, catalog and WebSocket requests. It disables redirects and uses a device-only Keychain item for paired computers. Bonjour supplies candidate addresses only. YouTube shortcuts and deep links prepare a validated draft and require an in-app action before sending a command.
 - Use TLS for pairing and all control traffic. No cleartext fallback and no token in URL/query strings.
 - Authenticate WSS with a random per-device bearer token. Protect Windows persistent secrets with current-user DPAPI and Android secrets with Keystore-backed authenticated encryption. Do not log codes, tokens or private keys.
 - Enforce message size, schema, numeric ranges, known protocol version and per-connection increasing sequence numbers. TLS protects recorded transport traffic; commands are not automatically replayed after reconnect.
