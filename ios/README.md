@@ -4,6 +4,8 @@ Bedside Remote for iPhone uses SwiftUI for the native tab bar, toolbars, menus, 
 
 Windows owns playback, sessions, the queue and revocation. The iPhone discovers private endpoints with Bonjour or accepts a manual numeric address. Compare the full SHA-256 fingerprint from Windows before requesting pairing, then approve the request on Windows. Both HTTPS and WSS pin the leaf certificate. Pairings are stored in the device-only Keychain and commands are discarded when a socket closes. Allow Local Network in iOS Settings if discovery or pairing fails. Open the Windows pairing window again if the six-digit code expires. Re-pair after a known certificate reset and verify the new fingerprint locally.
 
+With several pairings, the app checks saved endpoints in parallel when returning to the foreground. It connects automatically when exactly one computer responds with the expected certificate. When several respond or none responds, choose in Devices or check availability again. If a selected connection fails, Devices offers alternatives while that connection retries. Remote commands stay bound to the selected computer.
+
 ## Build and install
 
 1. Run the Windows setup executable from the [releases page](https://github.com/hugo2006alm/bedside-remote/releases). Allow the agent on your trusted private network if Windows Firewall prompts. For contextual playback, load the companion for the appropriate browser. See the [Windows guide](../windows/README.md) and [Netflix setup](../docs/netflix.md).

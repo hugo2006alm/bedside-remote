@@ -11,11 +11,15 @@ final class RemoteModel {
     private(set) var connected = false
     private(set) var pairing = false
     private(set) var selectedID: String?
+    private(set) var checkingComputers = false
+    private(set) var reachableIDs: Set<String>?
+    private(set) var connectionFailed = false
     var message: String?
     private(set) var pendingActions: Set<String> = []
 
     @ObservationIgnored private var active = false
     @ObservationIgnored private var connection: Task<Void, Never>?
+    @ObservationIgnored private var computerCheck: Task<Void, Never>?
     @ObservationIgnored private var pairingTask: Task<Void, Never>?
     @ObservationIgnored private var socket: URLSessionWebSocketTask?
     @ObservationIgnored private var generation = UUID()
@@ -46,14 +50,15 @@ final class RemoteModel {
         #endif
         do {
             computers = try PairingStore.load()
-            selectedID = UserDefaults.standard.string(forKey: "selectedComputer")
-            if !computers.contains(where: { $0.id == selectedID }) { selectedID = computers.first?.id }
         } catch {
             message = RemoteError.storage.localizedDescription
         }
     }
 
     var current: Computer? { computers.first { $0.id == selectedID } }
+    var needsComputerChoice: Bool {
+        computers.count > 1 && ((reachableIDs != nil && selectedID == nil) || connectionFailed)
+    }
     var supportsDrag: Bool { catalog?.controls.contains("drag") == true }
 
     #if DEBUG && targetEnvironment(simulator)
@@ -62,6 +67,13 @@ final class RemoteModel {
     private func configurePreview(_ mode: String) {
         preview = true
         if mode == "disconnected" { return }
+        if mode == "computer-choice" {
+            let first = Computer(id: "office", name: "Office PC", endpoint: Endpoint("192.168.1.2", 8765)!, pin: "", token: "")
+            let second = Computer(id: "bedroom", name: "Bedroom PC", endpoint: Endpoint("192.168.1.3", 8765)!, pin: "", token: "")
+            computers = [first, second]
+            reachableIDs = [first.id, second.id]
+            return
+        }
         connected = true
         selectedID = "preview"
         computers = [Computer(id: "preview", name: "Bedroom PC", endpoint: Endpoint("127.0.0.1", 8765)!, pin: "", token: "")]
@@ -88,13 +100,79 @@ final class RemoteModel {
         #endif
         guard value != active else { return }
         active = value
-        if !value { cancelPairing() }
-        reconnect()
+        if value {
+            checkComputers()
+        } else {
+            cancelPairing()
+            computerCheck?.cancel()
+            connection?.cancel()
+            disconnect()
+        }
     }
 
-    func select(_ id: String?) {
+    func checkComputers() {
+        #if DEBUG && targetEnvironment(simulator)
+        if preview { return }
+        #endif
+        computerCheck?.cancel()
+        connection?.cancel()
+        disconnect()
+        selectedID = nil
+        reachableIDs = nil
+        connectionFailed = false
+        message = nil
+        checkingComputers = false
+        guard active, !computers.isEmpty else { return }
+        if computers.count == 1 {
+            select(computers[0].id)
+            return
+        }
+
+        let saved = computers
+        checkingComputers = true
+        computerCheck = Task {
+            let reachable = await withTaskGroup(of: String?.self, returning: Set<String>.self) { group in
+                for computer in saved {
+                    group.addTask {
+                        await Self.responds(computer) ? computer.id : nil
+                    }
+                }
+                var ids = Set<String>()
+                for await id in group {
+                    if let id { ids.insert(id) }
+                }
+                return ids
+            }
+            guard !Task.isCancelled else { return }
+            computerCheck = nil
+            checkingComputers = false
+            if reachable.count == 1, let onlyID = reachable.first { select(onlyID) }
+            reachableIDs = reachable
+        }
+    }
+
+    private nonisolated static func responds(_ computer: Computer) async -> Bool {
+        let session = PinnedDelegate.session(pin: computer.pin, resourceTimeout: 3)
+        defer { session.invalidateAndCancel() }
+        let request = URLRequest(url: computer.endpoint.url("https", "/health"), timeoutInterval: 3)
+        struct Health: Decodable {
+            let version: Int
+            let name: String
+        }
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard (response as? HTTPURLResponse)?.statusCode == 200, data.count <= 4096 else { return false }
+            return try JSONDecoder().decode(Health.self, from: data).version == 1
+        } catch {
+            return false
+        }
+    }
+
+    func select(_ id: String) {
+        guard computers.contains(where: { $0.id == id }) else { return }
+        computerCheck?.cancel()
+        checkingComputers = false
         selectedID = id
-        UserDefaults.standard.set(id, forKey: "selectedComputer")
         reconnect()
     }
 
@@ -103,7 +181,7 @@ final class RemoteModel {
         do {
             try PairingStore.save(remaining)
             computers = remaining
-            if id == selectedID { select(remaining.first?.id) }
+            if id == selectedID || checkingComputers { checkComputers() }
         } catch {
             message = error.localizedDescription
         }
@@ -157,6 +235,7 @@ final class RemoteModel {
         connection?.cancel()
         disconnect()
         message = nil
+        connectionFailed = false
         guard active, let computer = current else { return }
         connection = Task {
             var delay = 1
@@ -168,6 +247,7 @@ final class RemoteModel {
                     guard !Task.isCancelled, generation == id else { return }
                     if connected { delay = 1 }
                     disconnect()
+                    connectionFailed = true
                     message = Self.connectionMessage(error)
                     if (error as? RemoteError) == .revoked { return }
                 }
@@ -228,6 +308,7 @@ final class RemoteModel {
                 snapshot = try JSONDecoder().decode(Snapshot.self, from: data)
                 if !connected { message = nil }
                 connected = true
+                connectionFailed = false
             case "ack":
                 guard Set(fields.keys).isSubset(of: ["version", "type", "id", "ok", "error"]) else { throw RemoteError.invalidResponse }
                 let ack = try JSONDecoder().decode(Acknowledgement.self, from: data)

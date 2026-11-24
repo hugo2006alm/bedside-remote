@@ -12,7 +12,17 @@ struct DevicesView: View {
     var body: some View {
         Form {
             Section("Paired computers") {
-                ForEach(model.computers) { computer in
+                if model.computers.count > 1 && !model.connected {
+                    if model.checkingComputers {
+                        ProgressView("Checking paired computers…")
+                    } else {
+                        Text(model.reachableIDs?.isEmpty == true && model.current == nil
+                             ? "No paired computers responded. Check the network or try again."
+                             : "Choose which computer to control.")
+                        Button("Check availability") { model.checkComputers() }
+                    }
+                }
+                ForEach(sortedComputers) { computer in
                     Button {
                         model.select(computer.id)
                     } label: {
@@ -20,6 +30,9 @@ struct DevicesView: View {
                             VStack(alignment: .leading) {
                                 Text(computer.name)
                                 Text(computer.endpoint.host).font(.caption).foregroundStyle(.secondary)
+                                if model.reachableIDs?.contains(computer.id) == true {
+                                    Text("Available on this network").font(.caption).foregroundStyle(.secondary)
+                                }
                             }
                             Spacer()
                             if computer.id == model.selectedID {
@@ -78,6 +91,12 @@ struct DevicesView: View {
             }
         }
     }
+    private var sortedComputers: [Computer] {
+        guard let available = model.reachableIDs else { return model.computers }
+        return model.computers.filter { available.contains($0.id) } +
+            model.computers.filter { !available.contains($0.id) }
+    }
+
 }
 
 struct QueueView: View {

@@ -45,13 +45,14 @@ final class PinnedDelegate: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         completionHandler(nil)
     }
 
-    static func session(pin: String) -> URLSession {
+    static func session(pin: String, resourceTimeout: TimeInterval? = nil) -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.connectionProxyDictionary = [:]
         config.httpShouldSetCookies = false
         config.urlCredentialStorage = nil
         config.urlCache = nil
         config.timeoutIntervalForRequest = 30
+        if let resourceTimeout { config.timeoutIntervalForResource = resourceTimeout }
         return URLSession(configuration: config, delegate: PinnedDelegate(pin: pin), delegateQueue: nil)
     }
 }

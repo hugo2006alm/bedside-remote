@@ -46,6 +46,9 @@ struct RootView: View {
                 .tabItem { Label("Devices", systemImage: "desktopcomputer") }
                 .tag("devices")
         }
+        .onChange(of: model.needsComputerChoice, initial: true) { _, choice in
+            if choice && tab == "remote" { tab = "devices" }
+        }
         .sheet(isPresented: $settings) { SettingsView() }
         .onChange(of: pendingYouTubeLink, initial: true) { _, value in
             guard let canonical = youtubeURL(value) else { return }
@@ -98,8 +101,7 @@ private struct RemoteView: View {
         GeometryReader { size in
             VStack(spacing: 8) {
                 if !model.connected {
-                    Button(model.current == nil ? "Pair a computer" : "Reconnect to \(model.current?.name ?? "Windows")", action: devices)
-                        .frame(minHeight: 44)
+                    Button(connectionTitle, action: devices).frame(minHeight: 44)
                 } else if let name = model.current?.name {
                     Text(name).font(.footnote).lineLimit(1)
                         .foregroundStyle(.secondary)
@@ -157,6 +159,13 @@ private struct RemoteView: View {
                 }
             }
         }
+    }
+
+    private var connectionTitle: String {
+        if model.computers.isEmpty { return "Pair a computer" }
+        if model.checkingComputers { return "Checking paired computers…" }
+        if let current = model.current { return "Reconnect to \(current.name)" }
+        return "Choose a computer"
     }
 
     private func icon(_ title: String, _ symbol: String, action: @escaping () -> Void) -> some View {

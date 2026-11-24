@@ -1,6 +1,16 @@
 import XCTest
 
 final class RemoteUITests: XCTestCase {
+    func testMultipleAvailableComputersRequireAChoice() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview-state", "computer-choice"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Choose which computer to control."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Office PC"].exists)
+        XCTAssertTrue(app.staticTexts["Bedroom PC"].exists)
+        XCTAssertFalse(app.buttons["Reconnect"].exists)
+    }
+
     func testRemoteOpensOnTrackpad() {
         let app = XCUIApplication()
         app.launch()
