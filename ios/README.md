@@ -6,11 +6,12 @@ Windows owns playback, sessions, the queue and revocation. The iPhone discovers 
 
 ## Build and install
 
-1. Install the Bedside Remote Windows agent and, for browser playback, load the Firefox/Zen or Edge companion for that browser from the matching release or CI artifact.
-2. On GitHub, open the **iOS CI** run for the branch and download **ios-sideload**. Extract the IPA and verify its SHA-256 checksum against the included file.
-3. Follow [SideStore's Windows installation guide](https://docs.sidestore.io/docs/installation/install) to set up SideStore, its pairing file and on-device connection. Enable Developer Mode in **Settings → Privacy & Security → Developer Mode** when required. After restarting, confirm the device prompt.
-4. Transfer the IPA to Files on the iPhone. In SideStore, open **My Apps**, tap **+**, select the IPA, and finish signing with your Apple Account on the device.
-5. Open Bedside Remote, allow Local Network access and pair from **Devices** using the endpoint, full fingerprint and temporary code displayed by Windows.
+1. Run the Windows setup executable from the [releases page](https://github.com/hugo2006alm/bedside-remote/releases). Allow the agent on your trusted private network if Windows Firewall prompts. For contextual playback, load the companion for the appropriate browser. See the [Windows guide](../windows/README.md) and [Netflix setup](../docs/netflix.md).
+2. Download the **ios-sideload** artifact from the branch's **iOS CI** run and extract the IPA. Compare its SHA-256 with the included checksum. On Windows, use `Get-FileHash -Algorithm SHA256 -LiteralPath "path-to.ipa"`.
+3. On the iPhone, install LocalDevVPN and connect it. On Windows, install iTunes and iLoader using the [SideStore prerequisites](https://docs.sidestore.io/docs/installation/prerequisites). Connect the iPhone by USB and confirm the trust prompt on the phone. Open iLoader, sign in with your Apple Account, select the iPhone and choose **Install SideStore (Stable)**.
+4. On the iPhone, open **Settings → General → VPN & Device Management** and trust the developer entry for the same Apple Account. Follow any restart and passcode prompts. Enable **Developer Mode** in **Settings → Privacy & Security**, restart and confirm. Connect LocalDevVPN, open SideStore, sign in with the same account and refresh SideStore under **My Apps**. Use the [SideStore install guide](https://docs.sidestore.io/docs/installation/install) for the trust and restart sequence on your iOS version.
+5. Transfer the IPA to Files on the iPhone. With LocalDevVPN connected, open **SideStore → My Apps → +**, select the IPA and finish signing on the device.
+6. Open Bedside Remote, allow Local Network access and put the iPhone and Windows on the same trusted LAN. In Windows, open the pairing window. On the phone, open **Devices**, choose the discovered PC or enter its numeric address and port, compare all 64 fingerprint digits, enter the temporary code, and approve the request on Windows.
 
 CI uses the pinned Xcode and XcodeGen versions listed in the workflow. On macOS with those tools installed, run `bash ios/build.sh` for simulator tests, screenshots and the device IPA, or `bash ios/build.sh --package-only` for the IPA alone. GitHub's runner performs these steps for Windows users. The device IPA is ARM64 and prepared for SideStore re-signing. Its CI tests run on a simulator.
 

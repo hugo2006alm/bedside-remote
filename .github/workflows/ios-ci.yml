@@ -48,13 +48,27 @@ jobs:
           path: artifacts/bedside-remote-ios-*
           if-no-files-found: error
           retention-days: 14
-      - name: Test and capture the iPhone simulator
+      - name: Capture the iPhone simulator
+        id: screenshots
+        continue-on-error: true
+        timeout-minutes: 12
+        run: bash ios/build.sh --capture-only
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: ios-screenshots
+          path: ios/build/remote-*.png
+          retention-days: 14
+      - name: Run iPhone simulator tests
+        if: always() && steps.screenshots.outcome != 'skipped'
+        timeout-minutes: 20
         run: bash ios/build.sh --simulator-only
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: ios-simulator
-          path: |
-            ios/build/tests.xcresult/
-            ios/build/remote-*.png
+          name: ios-simulator-tests
+          path: ios/build/tests.xcresult/
           retention-days: 14
+      - name: Require complete screenshot evidence
+        if: always() && steps.screenshots.outcome == 'failure'
+        run: exit 1

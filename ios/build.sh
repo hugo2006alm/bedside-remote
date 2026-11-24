@@ -17,31 +17,38 @@ xcodegen generate
 settings=(
     "MARKETING_VERSION=$marketing_version" "CURRENT_PROJECT_VERSION=$build_number" "BEDSIDE_VERSION=$version"
 )
-if [[ "${1:-}" != --package-only ]]; then
+mode="${1:-}"
+if [[ "$mode" != --package-only ]]; then
     device=$(xcrun simctl list devices available -j | python3 -c '
 import json, sys
 devices = json.load(sys.stdin)["devices"]
 print(next(d["udid"] for runtime, rows in reversed(sorted(devices.items())) for d in rows if "iOS" in runtime and d["name"] == "iPhone 17"))
 ')
-    xcrun simctl boot "$device" || xcrun simctl bootstatus "$device" -b
-    xcodebuild test -project BedsideRemote.xcodeproj -scheme BedsideRemote -destination "id=$device" \
-        -parallel-testing-enabled NO -derivedDataPath build/simulator -resultBundlePath build/tests.xcresult "${settings[@]}"
-    xcrun simctl bootstatus "$device" -b
-    xcrun simctl install "$device" build/simulator/Build/Products/Debug-iphonesimulator/BedsideRemote.app
-    xcrun simctl status_bar "$device" override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState discharging --batteryLevel 100
-    xcrun simctl terminate "$device" com.bedside.remote || true
-    for appearance in light dark; do
-        xcrun simctl ui "$device" appearance "$appearance"
-        for scene in disconnected idle youtube netflix netflix-actions; do
-            xcrun simctl launch "$device" com.bedside.remote --preview-state "$scene"
-            sleep 2
-            xcrun simctl io "$device" screenshot "build/remote-$appearance-$scene.png"
-            xcrun simctl terminate "$device" com.bedside.remote
+    destination=(-project BedsideRemote.xcodeproj -scheme BedsideRemote -destination "id=$device"
+                 -derivedDataPath build/simulator "${settings[@]}")
+    if [[ "$mode" != --capture-only ]]; then
+        xcodebuild test "${destination[@]}" -parallel-testing-enabled NO -resultBundlePath build/tests.xcresult
+    else
+        xcodebuild build "${destination[@]}"
+    fi
+    if [[ "$mode" != --simulator-only ]]; then
+        xcrun simctl bootstatus "$device" -b
+        xcrun simctl install "$device" build/simulator/Build/Products/Debug-iphonesimulator/BedsideRemote.app
+        xcrun simctl status_bar "$device" override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState discharging --batteryLevel 100
+        xcrun simctl terminate "$device" com.bedside.remote || true
+        for appearance in light dark; do
+            xcrun simctl ui "$device" appearance "$appearance"
+            for scene in disconnected idle youtube netflix netflix-actions; do
+                xcrun simctl launch "$device" com.bedside.remote --preview-state "$scene"
+                sleep 2
+                xcrun simctl io "$device" screenshot "build/remote-$appearance-$scene.png"
+                xcrun simctl terminate "$device" com.bedside.remote
+            done
         done
-    done
+    fi
 fi
 
-if [[ "${1:-}" == --simulator-only ]]; then exit 0; fi
+if [[ "$mode" == --simulator-only || "$mode" == --capture-only ]]; then exit 0; fi
 
 xcodebuild build -project BedsideRemote.xcodeproj -scheme BedsideRemote -configuration Release \
     -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/device \
