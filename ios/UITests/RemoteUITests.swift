@@ -6,8 +6,8 @@ final class RemoteUITests: XCTestCase {
         app.launchArguments = ["--preview-state", "computer-choice"]
         app.launch()
         XCTAssertTrue(app.staticTexts["Choose which computer to control."].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["Office PC"].exists)
-        XCTAssertTrue(app.staticTexts["Bedroom PC"].exists)
+        XCTAssertTrue(app.buttons["paired-computer-office"].exists)
+        XCTAssertTrue(app.buttons["paired-computer-bedroom"].exists)
         XCTAssertFalse(app.buttons["Reconnect"].exists)
     }
 

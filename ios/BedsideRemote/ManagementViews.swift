@@ -40,6 +40,7 @@ struct DevicesView: View {
                             }
                         }
                     }
+                    .accessibilityIdentifier("paired-computer-\(computer.id)")
                     .swipeActions {
                         Button("Forget", role: .destructive) { model.forget(computer.id) }
                     }
